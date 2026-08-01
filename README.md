@@ -63,7 +63,7 @@ wscript.exe ZhaxxxxxxQAQ.vbs
 启动 ZhaxxxxxxQAQ.bat
 ```
 
-托盘图标默认优先读取 `C:\Users\<你>\Desktop\图标.png`，不存在时回退到打包内 `resources\tray.png`；
+托盘图标默认优先读取用户桌面上的 `图标.png`，不存在时回退到打包内 `resources\tray.png`；
 打赏码同理回退 `resources\donation.png`，删除即可移除"关于"页打赏入口。
 
 ## 打包发布

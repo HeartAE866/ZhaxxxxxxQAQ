@@ -35,16 +35,18 @@ ICON_PATH = os.path.join(RES_DIR, "icon.jpg")
 LOGO_PATH = os.path.join(RES_DIR, "logo.png")
 VBS_PATH = os.path.join(ROOT, "ZhaxxxxxxQAQ.vbs")
 APP_NAME = "ZhaxxxxxxQAQ"
-APP_VERSION = "1.1.3"
+APP_VERSION = "1.1.4"
 RUN_REG_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 
-# 托盘图标：优先用户指定的桌面图，不存在（如他人机器）则用打包内图标
-TRAY_ICON_PATH = r"C:\Users\张鑫\Desktop\图标.png"
+# 托盘图标：优先用户桌面上的 图标.png（按当前用户主目录推导，不硬编码个人路径），
+# 不存在（如他人机器）则用打包内图标
+_USER_DESKTOP = os.path.join(os.path.expanduser("~"), "Desktop")
+TRAY_ICON_PATH = os.path.join(_USER_DESKTOP, "图标.png")
 if not os.path.exists(TRAY_ICON_PATH):
     TRAY_ICON_PATH = os.path.join(RES_DIR, "tray.png")
 
-# 打赏码：优先用户桌面图，删除后回退到打包内资源
-DONATION_IMG = r"C:\Users\张鑫\Desktop\赞赏码.png"
+# 打赏码：优先用户桌面 赞赏码.png，删除后回退到打包内资源
+DONATION_IMG = os.path.join(_USER_DESKTOP, "赞赏码.png")
 if not os.path.exists(DONATION_IMG):
     DONATION_IMG = os.path.join(RES_DIR, "donation.png")
 
@@ -105,8 +107,10 @@ def install_excepthook():
 
 # ---------------------------------------------------------------- 配置
 from theme import DEFAULT_THEME, DEFAULT_THEMES, DEFAULT_THEME_SETTINGS  # noqa: E402
+from i18n import tr, current_lang  # noqa: E402
 
 DEFAULT_CONFIG = {
+    "language": "zh",
     "theme": dict(DEFAULT_THEME),
     "theme_settings": dict(DEFAULT_THEME_SETTINGS),
     "saved_themes": dict(DEFAULT_THEMES),
@@ -118,10 +122,12 @@ DEFAULT_CONFIG = {
     "diy_bg": {"enabled": False, "image": "", "alpha": 120, "components": {}},
     "diy_bg_settings": {"enabled": False, "image": "", "alpha": 120, "components": {}},
     "folder_rules": {
-        "levels": [
-            {"template": "{Y}年"},
-            {"template": "{M}月"},
-            {"template": "{Y}.{M}.{D}{name}"},
+        "rules": [
+            {"name": "默认规则", "levels": [
+                {"template": "{Y}年"},
+                {"template": "{M}月"},
+                {"template": "{Y}.{M}.{D}{name}"},
+            ]},
         ],
     },
     "show_recent_days": 7,
@@ -148,6 +154,14 @@ class Config:
                     self._merge(self.data, json.load(f))
             except Exception:
                 log.error("读取 config.json 失败:\n" + traceback.format_exc())
+        self._migrate()
+
+    def _migrate(self):
+        """旧版本配置升级。"""
+        fr = self.data.get("folder_rules")
+        if isinstance(fr, dict) and "levels" in fr:
+            # v1.1.3 及以前：单条规则（无 rules 键）→ 转为规则列表
+            fr["rules"] = [{"name": "默认规则", "levels": fr.pop("levels")}]
 
     def _merge(self, base: dict, extra: dict):
         for k, v in extra.items():
@@ -187,6 +201,18 @@ TYPE_NAMES = {"record": "工作记录", "todo": "待办事项", "recur": "循环
               "remind": "提醒"}
 
 
+def type_name(key: str) -> str:
+    return tr(TYPE_NAMES.get(key, key))
+
+
+def priority_name(key: str) -> str:
+    return tr(PRIORITIES.get(key, key))
+
+
+def period_name(key: str) -> str:
+    return tr(PERIODS.get(key, key))
+
+
 def auto_priority(item: dict) -> str:
     """自动优先级：已完成→低；剩余两天以内→高；其他→中。"""
     if not item:
@@ -208,6 +234,7 @@ def new_item(item_type: str, title: str, **kw) -> dict:
         "priority": kw.get("priority", "mid"),
         "tags": kw.get("tags", []),
         "folder": kw.get("folder"),
+        "folder_rule": kw.get("folder_rule"),       # 创建时选用的平行生成规则名
         "order": kw.get("order", 0),
         "deadline": kw.get("deadline"),       # todo 用，ISO 分钟
         "remind_advance": kw.get("remind_advance"),   # todo 提前提醒分钟数
@@ -400,14 +427,21 @@ def recur_desc(item: dict) -> str:
     r = item.get("recur") or {}
     period = r.get("period", "day")
     t = r.get("time", "09:00")
+    en = current_lang() == "en"
     if period == "week":
-        wd = ["一", "二", "三", "四", "五", "六", "日"][r.get("weekday", 0)]
-        return f"每周{wd} {t}"
+        wd = r.get("weekday", 0)
+        name = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")[wd] if en \
+            else ("一", "二", "三", "四", "五", "六", "日")[wd]
+        return tr("每周{wd} {t}").replace("{wd}", name).replace("{t}", t)
     if period in ("month", "quarter"):
-        return f"{PERIODS[period]} {r.get('monthday', 1)}日 {t}"
+        d = r.get("monthday", 1)
+        key = "每季 {d}日 {t}" if period == "quarter" else "每月 {d}日 {t}"
+        return tr(key).replace("{d}", str(d)).replace("{t}", t)
     if period == "year":
-        return f"每年 {r.get('month', 1)}月{r.get('monthday', 1)}日 {t}"
-    return f"每天 {t}"
+        m, d = r.get("month", 1), r.get("monthday", 1)
+        return tr("每年 {m}月{d}日 {t}").replace("{m}", str(m)) \
+            .replace("{d}", str(d)).replace("{t}", t)
+    return tr("每天 {t}").replace("{t}", t)
 
 
 # ---------------------------------------------------------------- 文件夹规则
@@ -457,6 +491,25 @@ DEFAULT_FOLDER_RULES = [
 ]
 
 
+def folder_rules_list(rules) -> list:
+    """规范化文件夹规则配置 → 规则列表（含旧版单规则兼容）。"""
+    rules = rules or {}
+    lst = rules.get("rules")
+    if isinstance(lst, list) and lst:
+        return lst
+    levels = rules.get("levels") or [dict(t) for t in DEFAULT_FOLDER_RULES]
+    return [{"name": "默认规则", "levels": levels}]
+
+
+def folder_rule_index(rules, name) -> int:
+    """按规则名查找规则下标，未找到返回 0。"""
+    if name:
+        for i, r in enumerate(folder_rules_list(rules)):
+            if r.get("name") == name:
+                return i
+    return 0
+
+
 def render_folder_template(tpl: str, d, name: str) -> str:
     """把规则模板渲染为实际文件夹名。
     {Y}=年份 {M}=月份 {D}=日 {name}=事项名称。"""
@@ -465,15 +518,18 @@ def render_folder_template(tpl: str, d, name: str) -> str:
              .replace("{D}", str(d.day)).replace("{name}", name))
 
 
-def create_bound_folder(item: dict, base_folder: str, rules: dict | None = None) -> str:
-    """按用户配置的规则逐层生成并创建绑定文件夹路径。"""
+def create_bound_folder(item: dict, base_folder: str, rules=None,
+                        rule_index: int = 0) -> str:
+    """按用户配置的规则逐层生成并创建绑定文件夹路径（平行规则：rule_index 选择第几条）。"""
     name = sanitize_name(item["title"])
     if item["type"] == "recur":
         path = unique_path(os.path.join(base_folder, "循环任务", name))
         os.makedirs(path, exist_ok=True)
         log.info(f"创建工作文件夹: {path}")
         return path
-    levels = (rules or {}).get("levels")
+    rules_list = folder_rules_list(rules)
+    rule = rules_list[min(max(rule_index, 0), len(rules_list) - 1)]
+    levels = rule.get("levels")
     if not levels:
         levels = [dict(t) for t in DEFAULT_FOLDER_RULES]
     d = item_date(item)
@@ -530,8 +586,8 @@ def set_autostart(enable: bool):
 
 # ---------------------------------------------------------------- 导入 / 导出
 CSV_FIELDS = ["id", "type", "title", "created", "deadline", "priority", "done",
-              "tags", "folder", "order", "remind_advance", "remind_time",
-              "notified_for",
+              "tags", "folder", "folder_rule", "order", "remind_advance",
+              "remind_time", "notified_for",
               "recur_period", "recur_time", "recur_weekday", "recur_monthday",
               "recur_month", "completed_instances"]
 
@@ -543,6 +599,7 @@ def _item_to_row(it: dict) -> dict:
         "created": it.get("created", ""), "deadline": it.get("deadline") or "",
         "priority": it.get("priority", "mid"), "done": int(bool(it.get("done"))),
         "tags": ";".join(it.get("tags", [])), "folder": it.get("folder") or "",
+        "folder_rule": it.get("folder_rule") or "",
         "order": it.get("order", 0), "remind_advance": it.get("remind_advance") or "",
         "remind_time": it.get("remind_time") or "", "notified_for": it.get("notified_for") or "",
         "recur_period": r.get("period", ""), "recur_time": r.get("time", ""),
@@ -574,6 +631,7 @@ def _row_to_item(row: dict) -> dict:
         "done": str(row.get("done", "0")) in ("1", "true", "True"),
         "tags": [t for t in (row.get("tags") or "").split(";") if t],
         "folder": row.get("folder") or None,
+        "folder_rule": row.get("folder_rule") or None,
         "order": int(row.get("order") or 0),
         "remind_advance": int(adv) if str(adv or "").isdigit() else None,
         "remind_time": row.get("remind_time") or None,

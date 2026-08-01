@@ -13,10 +13,14 @@ from PySide6.QtWidgets import (QFrame, QHBoxLayout, QLabel, QLineEdit,
 
 import core
 import theme as theme_mod
+from i18n import tr, current_lang
 from widgets import (BgFrame, CloseIconButton, CompactIconButton, styled_menu,
-                     set_click_through, apply_frosted, apply_window_corners)
+                     set_click_through, set_window_z_order, apply_frosted,
+                     apply_window_corners)
 
 WEEKDAYS = ["一", "二", "三", "四", "五", "六", "日"]
+WEEKDAYS_EN = ["Monday", "Tuesday", "Wednesday", "Thursday",
+               "Friday", "Saturday", "Sunday"]
 
 
 # ---------------------------------------------------------------- 提醒行（独立区域）
@@ -60,7 +64,7 @@ class DragHandle(QLabel):
         self.row = row
         self.setFixedWidth(14)
         self.setCursor(Qt.SizeVerCursor)
-        self.setToolTip("拖拽排序")
+        self.setToolTip(tr("拖拽排序"))
         self.setStyleSheet(f"color:{row.t['done_text']};padding:0 1px;")
 
     def mousePressEvent(self, e):
@@ -91,7 +95,9 @@ class ItemRow(QFrame):
         pcolor = t.get(item.get("priority", "mid"), t["mid"])
         strip = QFrame(fixedWidth=4, fixedHeight=22)
         strip.setStyleSheet(f"background-color:{pcolor};border-radius:2px;")
-        strip.setToolTip(f"优先级：{core.PRIORITIES.get(item.get('priority'), '中')}")
+        pname = core.priority_name(item.get("priority", "mid"))
+        strip.setToolTip(f"Priority: {pname}" if current_lang() == "en"
+                         else f"优先级：{pname}")
         lay.addWidget(strip, 0, Qt.AlignVCenter)
 
         # 待办拖拽手柄
@@ -125,7 +131,7 @@ class ItemRow(QFrame):
         # 文件夹按钮
         btn = QLabel("📁")
         btn.setCursor(Qt.PointingHandCursor)
-        btn.setToolTip("打开工作目录")
+        btn.setToolTip(tr("打开工作目录"))
         btn.mousePressEvent = lambda e: win.app.open_folder_flow(self.item)
         lay.addWidget(btn, 0, Qt.AlignVCenter)
 
@@ -164,8 +170,8 @@ class ItemRow(QFrame):
             if dl:
                 today = date.today()
                 if dl.date() == today:
-                    return f"截止 {dl.strftime('%H:%M')}"
-                return f"截止 {dl.strftime('%m-%d %H:%M')}"
+                    return f"{tr('截止 ')}{dl.strftime('%H:%M')}"
+                return f"{tr('截止 ')}{dl.strftime('%m-%d %H:%M')}"
         return ""
 
     def refresh_soft(self):
@@ -277,11 +283,11 @@ class FloatWindow(QWidget):
         hl = QHBoxLayout(self.header)
         hl.setContentsMargins(0, 0, 0, 0)
         hl.setSpacing(6)
-        self.btn_huo = QPushButton("⚡ 来活了", objectName="AccentButton")
-        self.btn_huo.setToolTip("快速记录工作 / 登记以往工作")
+        self.btn_huo = QPushButton(tr("⚡ 来活了"), objectName="AccentButton")
+        self.btn_huo.setToolTip(tr("快速记录工作 / 登记以往工作"))
         self.btn_huo.clicked.connect(lambda: self.app.quick_record_menu())
         hl.addWidget(self.btn_huo)
-        self.search = QLineEdit(placeholderText="🔍 搜索…")
+        self.search = QLineEdit(placeholderText=tr("🔍 搜索…"))
         self._search_timer = QTimer(self, singleShot=True, interval=150,
                                     timeout=self.refresh)
         self.search.textChanged.connect(lambda _: self._search_timer.start())
@@ -289,7 +295,7 @@ class FloatWindow(QWidget):
         self.btn_min = CompactIconButton(objectName="CompactButton", fixedWidth=30,
                                          text=self.t.get("text", "#e8e8f0"))
         self.btn_min.setFixedHeight(28)
-        self.btn_min.setToolTip("最小化到紧凑模式")
+        self.btn_min.setToolTip(tr("最小化到紧凑模式"))
         self.btn_min.clicked.connect(lambda: self.app.toggle_compact(None))
         hl.addWidget(self.btn_min)
         self.main_lay.addWidget(self.header)
@@ -302,8 +308,8 @@ class FloatWindow(QWidget):
         self.reminder_lay = QVBoxLayout()
         self.reminder_lay.setSpacing(4)
         rp_lay.addLayout(self.reminder_lay, 1)
-        btn_rm = QPushButton("＋ 添加提醒", objectName="FlatButton")
-        btn_rm.setToolTip("添加提醒（到点提醒你做什么事，不绑定文件夹）")
+        btn_rm = QPushButton(tr("＋ 添加提醒"), objectName="FlatButton")
+        btn_rm.setToolTip(tr("添加提醒（到点提醒你做什么事，不绑定文件夹）"))
         btn_rm.clicked.connect(lambda: self.app.add_reminder())
         rp_lay.addWidget(btn_rm)
         self.reminder_panel.setVisible(False)
@@ -406,8 +412,12 @@ class FloatWindow(QWidget):
     def _update_clock(self):
         n = datetime.now()
         self.clock_time_lbl.setText(n.strftime("%H:%M:%S"))
-        self.clock_date_lbl.setText(
-            f"{n.year}年{n.month}月{n.day}日 星期{WEEKDAYS[n.weekday()]}")
+        if current_lang() == "en":
+            self.clock_date_lbl.setText(
+                f"{WEEKDAYS_EN[n.weekday()]}, {n.year}-{n.month:02d}-{n.day:02d}")
+        else:
+            self.clock_date_lbl.setText(
+                f"{n.year}年{n.month}月{n.day}日 星期{WEEKDAYS[n.weekday()]}")
         self._update_offwork()
 
     def _update_offwork(self):
@@ -418,7 +428,7 @@ class FloatWindow(QWidget):
             self.clock_off_lbl.setText("")
             return
         if cfg.get("weekdays_only", True) and n.weekday() >= 5:
-            self.clock_off_lbl.setText("休息日")
+            self.clock_off_lbl.setText(tr("休息日"))
             return
         try:
             hh, mm = [int(x) for x in str(cfg.get("time", "18:00")).split(":")]
@@ -426,17 +436,28 @@ class FloatWindow(QWidget):
             hh, mm = 18, 0
         target = n.replace(hour=hh, minute=mm, second=0, microsecond=0)
         if n >= target:
-            self.clock_off_lbl.setText("已下班")
+            self.clock_off_lbl.setText(tr("已下班"))
             return
         secs = int((target - n).total_seconds())
         fmt = cfg.get("format", "min")
-        if fmt == "sec":
-            value = f"{secs} 秒"
-        elif fmt == "hour":
-            value = f"{secs // 3600}小时{(secs % 3600) // 60}分"
+        if current_lang() == "en":
+            h, m, s = secs // 3600, (secs % 3600) // 60, secs % 60
+            if fmt == "sec":
+                value = f"{secs} s"
+            elif fmt == "hour":
+                value = f"{h} h {m} min"
+            else:
+                value = f"{m} min {s:02d} s"
         else:
-            value = f"{secs // 60}分{secs % 60:02d}秒"
+            if fmt == "sec":
+                value = f"{secs} 秒"
+            elif fmt == "hour":
+                value = f"{secs // 3600}小时{(secs % 3600) // 60}分"
+            else:
+                value = f"{secs // 60}分{secs % 60:02d}秒"
         template = str(cfg.get("template", "距下班 {n}"))
+        if template == "距下班 {n}":
+            template = tr("距下班 {n}")
         self.clock_off_lbl.setText(template.replace("{n}", value))
 
     def _refresh_clock_panel_visibility(self):
@@ -476,6 +497,7 @@ class FloatWindow(QWidget):
         self.set_compact(cfg.get("compact", False), save=False)
         set_click_through(self, cfg.get("click_through", False))
         self.show()
+        set_window_z_order(self, bool(cfg.get("topmost")))   # 强制 Z 序，保证置顶生效
 
     def save_geometry(self):
         if self.app.config.get("window", "compact"):
@@ -675,11 +697,11 @@ class FloatWindow(QWidget):
     def _update_compact_text(self):
         item = self._most_urgent()
         if item is None:
-            self.compact_lbl.setText("✨ 暂无紧急事项，点击展开")
+            self.compact_lbl.setText(tr("✨ 暂无紧急事项，点击展开"))
         else:
             self.compact_lbl.setText(item['title'])
             self.compact_lbl.setStyleSheet(f"color:{self.t['high']};font-weight:bold;")
-        self.compact_bar.setToolTip("点击展开常规模式；长按拖拽移动；边缘可横向缩放")
+        self.compact_bar.setToolTip(tr("点击展开常规模式；长按拖拽移动；边缘可横向缩放"))
         QTimer.singleShot(0, self._fit_height)   # 字数过多换行后校正高度
 
     def _most_urgent(self):
@@ -752,7 +774,7 @@ class FloatWindow(QWidget):
 
         # ------- 空状态引导
         if not months and not recurs and not reminds:
-            hint_lbl = QLabel("✨ 暂无事项\n\n点击上方「⚡ 来活了」快速记录工作或添加循环任务")
+            hint_lbl = QLabel(tr("✨ 暂无事项\n\n点击上方「⚡ 来活了」快速记录工作或添加循环任务"))
             hint_lbl.setAlignment(Qt.AlignCenter)
             hint_lbl.setWordWrap(True)
             hint_lbl.setStyleSheet(
@@ -765,7 +787,7 @@ class FloatWindow(QWidget):
             ykey = f"y{year}"
             y_open = self.expanded.get(ykey, year == today.year)
             self.expanded[ykey] = y_open
-            yheader = GroupHeader(self, f"{year}年", ykey)
+            yheader = GroupHeader(self, tr("{y}年").replace("{y}", str(year)), ykey)
             self.content_lay.addWidget(yheader)
             ycont = QWidget()
             ylay = QVBoxLayout(ycont)
@@ -777,7 +799,7 @@ class FloatWindow(QWidget):
                     mkey, year == today.year and month == today.month)
                 self.expanded[mkey] = m_open
                 mitems = months[year][month]
-                mheader = GroupHeader(self, f"{month}月", mkey)
+                mheader = GroupHeader(self, tr("{m}月").replace("{m}", str(month)), mkey)
                 ylay.addWidget(mheader)
                 mcont = QWidget()
                 mlay = QVBoxLayout(mcont)
@@ -833,7 +855,7 @@ class FloatWindow(QWidget):
         key = "recur"
         r_open = self.expanded.get(key, True)
         self.expanded[key] = r_open
-        header = GroupHeader(self, "🔁 循环任务", key)
+        header = GroupHeader(self, tr("🔁 循环任务"), key)
         self.content_lay.addWidget(header)
         cont = QWidget()
         lay = QVBoxLayout(cont)

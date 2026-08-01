@@ -16,8 +16,10 @@ from PySide6.QtWidgets import (QApplication, QFrame, QLabel, QSystemTrayIcon,
                                QVBoxLayout, QWidget)
 
 import core
+import i18n
 import theme as theme_mod
 from core import log
+from i18n import tr
 from editor import DetailDialog, ItemEditDialog, ReminderDialog, ReminderEditDialog
 from main_window import FloatWindow
 from settings import SettingsWindow
@@ -50,7 +52,7 @@ class StartupSplash(QWidget):
         name.setStyleSheet(
             f"font-size:16pt;font-weight:bold;color:{t['accent']};letter-spacing:2px;")
         lay.addWidget(name)
-        sub = QLabel("轻量桌面工作记事录", alignment=Qt.AlignCenter)
+        sub = QLabel(tr("轻量桌面工作记事录"), alignment=Qt.AlignCenter)
         sub.setStyleSheet(f"font-size:9pt;color:{t.get('done_text', '#888')};")
         lay.addWidget(sub)
         self.adjustSize()
@@ -120,6 +122,7 @@ class App(QObject):
             sys.exit(0)
 
         self.config = core.Config()
+        i18n.set_lang(self.config.get("language", default="zh"))
         self.store = core.DataStore()
         self.t = self.config.get("theme")
         self.qapp.setStyleSheet(theme_mod.build_qss(self.t))
@@ -159,14 +162,14 @@ class App(QObject):
         m.clear()
         wcfg = self.config.get("window", default={})
 
-        act_show = m.addAction("隐藏主界面" if self.win.isVisible() else "显示主界面")
+        act_show = m.addAction(tr("隐藏主界面") if self.win.isVisible() else tr("显示主界面"))
         act_show.triggered.connect(self.toggle_visible)
         m.addSeparator()
-        m.addAction("⚡ 来活了").triggered.connect(self.quick_record_menu)
+        m.addAction(tr("⚡ 来活了")).triggered.connect(self.quick_record_menu)
         m.addSeparator()
 
         def chk(text, key, fn):
-            a = m.addAction(text)
+            a = m.addAction(tr(text))
             a.setCheckable(True)
             a.setChecked(bool(wcfg.get(key)))
             a.triggered.connect(fn)
@@ -177,9 +180,9 @@ class App(QObject):
         chk("窗口置顶", "topmost", self.set_topmost)
         chk("鼠标穿透", "click_through", self.set_click_through)
         m.addSeparator()
-        m.addAction("⚙ 设置  Ctrl+Shift+Z+X").triggered.connect(self.show_settings)
-        m.addAction("↻ 重启应用").triggered.connect(self.restart)
-        m.addAction("退出程序").triggered.connect(self.quit)
+        m.addAction(tr("⚙ 设置  Ctrl+Shift+Z+X")).triggered.connect(self.show_settings)
+        m.addAction(tr("↻ 重启应用")).triggered.connect(self.restart)
+        m.addAction(tr("退出程序")).triggered.connect(self.quit)
 
     def _tray_activated(self, reason):
         if reason == QSystemTrayIcon.DoubleClick:
@@ -204,7 +207,7 @@ class App(QObject):
 
     def set_locked(self, v: bool):
         self.config.set("window", "locked", v)
-        Toast.show_text("位置已锁定" if v else "位置已解锁")
+        Toast.show_text(tr("位置已锁定") if v else tr("位置已解锁"))
         self._rebuild_menu()
 
     def set_topmost(self, v: bool):
@@ -218,20 +221,21 @@ class App(QObject):
         new = (not cur) if v is None else v
         self.config.set("window", "click_through", new)
         set_click_through(self.win, new)
-        Toast.show_text("鼠标穿透：开（Ctrl+Shift+Z+P 恢复）" if new else "鼠标穿透：关")
+        Toast.show_text(tr("鼠标穿透：开（Ctrl+Shift+Z+P 恢复）") if new
+                        else tr("鼠标穿透：关"))
         self._rebuild_menu()
 
     # ---------------------------------------------------------------- 事项操作
     def quick_record_menu(self):
         """“来活了”：添加待办、登记以往工作或循环任务。"""
         m = styled_menu(self.win)
-        m.addAction("🚀 开始新工作").triggered.connect(
+        m.addAction(tr("🚀 开始新工作")).triggered.connect(
             lambda: self.add_item("todo"))
-        m.addAction("🕐 登记以往工作（选择时间）").triggered.connect(
+        m.addAction(tr("🕐 登记以往工作（选择时间）")).triggered.connect(
             lambda: self.quick_record(True))
-        m.addAction("🔁 添加循环任务").triggered.connect(
+        m.addAction(tr("🔁 添加循环任务")).triggered.connect(
             lambda: self.add_item("recur"))
-        m.addAction("⏰ 添加提醒").triggered.connect(
+        m.addAction(tr("⏰ 添加提醒")).triggered.connect(
             lambda: self.add_reminder())
         m.exec(QCursor.pos())
 
@@ -248,11 +252,11 @@ class App(QObject):
 
     def reminder_context_menu(self, item: dict, gpos):
         m = styled_menu(self.win)
-        m.addAction("✏ 编辑").triggered.connect(lambda: self.edit_reminder(item))
-        m.addAction("✔ 标记完成").triggered.connect(
+        m.addAction(tr("✏ 编辑")).triggered.connect(lambda: self.edit_reminder(item))
+        m.addAction(tr("✔ 标记完成")).triggered.connect(
             lambda: self._complete_reminder(item))
         m.addSeparator()
-        m.addAction("🗑 删除").triggered.connect(
+        m.addAction(tr("🗑 删除")).triggered.connect(
             lambda: self._delete_reminder(item))
         m.exec(gpos)
 
@@ -264,8 +268,9 @@ class App(QObject):
         self.win.refresh()
 
     def _delete_reminder(self, item: dict):
-        ok, _ = ConfirmDialog.ask(self.win, self.t, "删除提醒",
-                                  f"删除提醒「{item['title']}」？", ok_text="删除")
+        ok, _ = ConfirmDialog.ask(self.win, self.t, tr("删除提醒"),
+                                  tr("删除提醒「{title}」？").replace("{title}", item["title"]),
+                                  ok_text=tr("删除"))
         if ok:
             self.store.delete([item["id"]])
             self.win.refresh()
@@ -286,7 +291,7 @@ class App(QObject):
             it["order"] = self.store.next_order()
         self.store.add(it)
         self.win.refresh()
-        Toast.show_text(f"已添加：{it['title']}")
+        Toast.show_text(tr("已添加：{title}").replace("{title}", it["title"]))
 
     def edit_item(self, item: dict):
         d = ItemEditDialog(self.win, self.t, item["type"], item, config=self.config)
@@ -305,16 +310,16 @@ class App(QObject):
 
     def item_context_menu(self, item: dict, gpos):
         m = styled_menu(self.win)
-        m.addAction("📋 详情").triggered.connect(lambda: self.show_detail(item))
-        m.addAction("✏ 编辑").triggered.connect(lambda: self.edit_item(item))
+        m.addAction(tr("📋 详情")).triggered.connect(lambda: self.show_detail(item))
+        m.addAction(tr("✏ 编辑")).triggered.connect(lambda: self.edit_item(item))
         if item["type"] == "todo":
-            text = "↩ 取消完成" if item.get("done") else "✔ 标记完成"
+            text = tr("↩ 取消完成") if item.get("done") else tr("✔ 标记完成")
             m.addAction(text).triggered.connect(lambda: self._toggle_todo(item))
         if item["type"] == "recur" and core.pending_instance(item):
-            m.addAction("✔ 完成当期").triggered.connect(
+            m.addAction(tr("✔ 完成当期")).triggered.connect(
                 lambda: self._complete_instance(item))
         m.addSeparator()
-        m.addAction("📂 打开工作目录").triggered.connect(
+        m.addAction(tr("📂 打开工作目录")).triggered.connect(
             lambda: self.open_folder_flow(item))
         m.exec(gpos)
 
@@ -332,14 +337,15 @@ class App(QObject):
             log.info(f"循环任务完成当期: {item['title']} @ {pend}")
             self.store.save()
             self.win.refresh()
-            Toast.show_text(f"已完成当期：{item['title']}")
+            Toast.show_text(tr("已完成当期：{title}").replace("{title}", item["title"]))
 
     def open_folder_flow(self, item: dict):
         folder = item.get("folder")
         if not folder or not os.path.isdir(folder):
             base = self.config.get("base_folder", default=core.DEFAULT_BASE_FOLDER)
-            folder = core.create_bound_folder(
-                item, base, self.config.get("folder_rules", default={}))
+            rules = self.config.get("folder_rules", default={})
+            idx = core.folder_rule_index(rules, item.get("folder_rule"))
+            folder = core.create_bound_folder(item, base, rules, rule_index=idx)
             item["folder"] = folder
             self.store.save()
             self.win.refresh()
@@ -431,14 +437,16 @@ class App(QObject):
                 pend = core.pending_instance(it)
                 if pend and now >= core.parse_dt(pend) \
                         and it.get("notified_for") != pend:
-                    due.append((it, f"循环任务到时间了（{core.recur_desc(it)}）"))
+                    due.append((it, tr("循环任务到时间了（{desc}）")
+                                .replace("{desc}", core.recur_desc(it))))
             elif it["type"] == "remind" and r.get("remind_enabled", True) \
                     and not it.get("done") and it.get("remind_time"):
                 rt = core.parse_dt(it["remind_time"])
                 adv = it.get("remind_advance") or 0
                 if rt and now >= rt - timedelta(minutes=adv) \
                         and it.get("notified_for") != it["remind_time"]:
-                    due.append((it, f"提醒时间到（{it['remind_time']}）"))
+                    due.append((it, tr("提醒时间到（{time}）")
+                                .replace("{time}", it['remind_time'])))
         for it, msg in due:
             self._fire_reminder(it, msg)
         if due:
@@ -457,9 +465,10 @@ class App(QObject):
 
     def _todo_msg(self, it, dl, now):
         if now >= dl:
-            return f"待办截止时间已到（{it['deadline']}）"
+            return tr("待办截止时间已到（{deadline}）").replace("{deadline}", it['deadline'])
         mins = int((dl - now).total_seconds() // 60)
-        return f"待办将于 {mins} 分钟后截止（{it['deadline']}）"
+        return tr("待办将于 {mins} 分钟后截止（{deadline}）") \
+            .replace("{mins}", str(mins)).replace("{deadline}", it['deadline'])
 
     def _fire_reminder(self, item, message):
         log.info(f"提醒: {item['title']} - {message}")
@@ -563,7 +572,7 @@ class App(QObject):
         self.quit()
 
     def run(self):
-        Toast.show_text(f"{core.APP_NAME} 已在桌面运行")
+        Toast.show_text(tr("ZhaxxxxxxQAQ 已在桌面运行"))
         StartupSplash(self.t).play()
         sys.exit(self.qapp.exec())
 

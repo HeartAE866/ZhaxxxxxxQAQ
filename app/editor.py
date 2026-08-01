@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (QCheckBox, QComboBox, QDateTimeEdit,
                                QVBoxLayout, QWidget)
 
 import core
+from i18n import tr
 from widgets import FramelessDialog, ConfirmDialog
 
 ADVANCE_OPTIONS = [("截止时提醒", 0), ("提前5分钟", 5), ("提前15分钟", 15),
@@ -19,9 +20,13 @@ ADVANCE_OPTIONS = [("截止时提醒", 0), ("提前5分钟", 5), ("提前15分�
                    ("不提醒", -1)]
 
 
+def _advance_text(name: str) -> str:
+    return tr(name)
+
+
 def _form_row(label: str, widget: QWidget) -> QHBoxLayout:
     row = QHBoxLayout()
-    lbl = QLabel(label)
+    lbl = QLabel(tr(label))
     lbl.setFixedWidth(64)
     row.addWidget(lbl)
     row.addWidget(widget, 1)
@@ -47,11 +52,12 @@ class ItemEditDialog(FramelessDialog):
 
     def __init__(self, parent, t: dict, item_type: str, item: dict | None = None,
                  record_now: bool = True, config=None):
-        names = {"record": "工作记录", "todo": "待办事项", "recur": "循环任务"}
         if item_type == "todo":
-            title = "开始新工作" if item is None else "编辑待办事项"
+            title = tr("开始新工作") if item is None else tr("编辑待办事项")
         else:
-            title = f"{'编辑' if item else '添加'}{names[item_type]}"
+            base = core.type_name(item_type)
+            title = (tr("编辑{name}") if item else tr("添加{name}")) \
+                .replace("{name}", base)
         super().__init__(parent, t, title, width=400)
         self.setWindowModality(Qt.NonModal)
         self.item_type = item_type
@@ -60,12 +66,12 @@ class ItemEditDialog(FramelessDialog):
         self.result_item = None
 
         self.title_edit = QLineEdit(item["title"] if item else "")
-        self.title_edit.setPlaceholderText("请输入事项名称…")
+        self.title_edit.setPlaceholderText(tr("请输入事项名称…"))
         self.body.addLayout(_form_row("名称", self.title_edit))
 
         # ---- 工作记录：时间（支持登记以往工作）
         if item_type == "record":
-            self.time_custom = QCheckBox("自定义时间（登记以往工作）")
+            self.time_custom = QCheckBox(tr("自定义时间（登记以往工作）"))
             created_dt = core.parse_dt(item["created"]) if item else core.now()
             self.record_time = QDateTimeEdit(QDateTime(created_dt))
             self.record_time.setDisplayFormat("yyyy-MM-dd HH:mm")
@@ -79,18 +85,18 @@ class ItemEditDialog(FramelessDialog):
 
         # ---- 优先级（默认自动，可手动选择）
         self.priority = QComboBox()
-        self.priority.addItem("自动（推荐）", "auto")
+        self.priority.addItem(tr("自动（推荐）"), "auto")
         for k in ("high", "mid", "low"):
-            self.priority.addItem(core.PRIORITIES[k], k)
+            self.priority.addItem(core.priority_name(k), k)
         cur = (item or {}).get("priority")
         idx = self.priority.findData(cur if cur in ("high", "mid", "low") else "auto")
         self.priority.setCurrentIndex(max(0, idx))
-        self.priority.setToolTip("自动：已完成→低；剩余两天以内→高；其他→中")
+        self.priority.setToolTip(tr("自动：已完成→低；剩余两天以内→高；其他→中"))
         self.body.addLayout(_form_row("优先级", self.priority))
 
         # ---- 待办：截止时间 + 提前提醒
         if item_type == "todo":
-            self.has_deadline = QCheckBox("设置截止时间")
+            self.has_deadline = QCheckBox(tr("设置截止时间"))
             self.body.addWidget(self.has_deadline)
             self.deadline = QDateTimeEdit(QDateTime.currentDateTime().addSecs(3600))
             self.deadline.setDisplayFormat("yyyy-MM-dd HH:mm")
@@ -105,7 +111,7 @@ class ItemEditDialog(FramelessDialog):
 
             self.advance = QComboBox()
             for name, v in ADVANCE_OPTIONS:
-                self.advance.addItem(name, v)
+                self.advance.addItem(_advance_text(name), v)
             cur = (item or {}).get("remind_advance")
             idx = next((i for i, (_, v) in enumerate(ADVANCE_OPTIONS) if v == cur), 0)
             self.advance.setCurrentIndex(idx)
@@ -116,7 +122,7 @@ class ItemEditDialog(FramelessDialog):
             r = (item or {}).get("recur") or {}
             self.period = QComboBox()
             for k, v in core.PERIODS.items():
-                self.period.addItem(v, k)
+                self.period.addItem(core.period_name(k), k)
             self.period.setCurrentIndex(
                 list(core.PERIODS).index(r.get("period", "day")))
             self.body.addLayout(_form_row("循环周期", self.period))
@@ -130,10 +136,14 @@ class ItemEditDialog(FramelessDialog):
             wl = QHBoxLayout(self.week_row)
             wl.setContentsMargins(0, 0, 0, 0)
             self.weekday = QComboBox()
-            for i, d in enumerate(["一", "二", "三", "四", "五", "六", "日"]):
-                self.weekday.addItem(f"星期{d}", i)
+            wd_items = (("Mon", 0), ("Tue", 1), ("Wed", 2), ("Thu", 3),
+                        ("Fri", 4), ("Sat", 5), ("Sun", 6)) if tr("星期") != "星期" \
+                else (("星期一", 0), ("星期二", 1), ("星期三", 2), ("星期四", 3),
+                      ("星期五", 4), ("星期六", 5), ("星期日", 6))
+            for text, i in wd_items:
+                self.weekday.addItem(text, i)
             self.weekday.setCurrentIndex(r.get("weekday", datetime.now().weekday()))
-            lbl = QLabel("星期")
+            lbl = QLabel(tr("星期"))
             lbl.setFixedWidth(64)
             wl.addWidget(lbl)
             wl.addWidget(self.weekday, 1)
@@ -168,37 +178,43 @@ class ItemEditDialog(FramelessDialog):
 
         # ---- 标签
         self.tags_edit = QLineEdit(", ".join((item or {}).get("tags", [])))
-        self.tags_edit.setPlaceholderText("多个标签用逗号分隔，如：紧急, 周报")
+        self.tags_edit.setPlaceholderText(tr("多个标签用逗号分隔，如：紧急, 周报"))
         self.body.addLayout(_form_row("标签", self.tags_edit))
 
-        # ---- 文件夹绑定（默认按规则自动创建，规则在 设置→文件夹 中可自定义）
+        # ---- 文件夹绑定（可选用任意一条平行生成规则，规则在 设置→文件夹 中自定义）
         self.folder_mode = QComboBox()
         existing_folder = (item or {}).get("folder")
         if existing_folder:
             short = existing_folder if len(existing_folder) <= 34 \
                 else "…" + existing_folder[-33:]
-            self.folder_mode.addItem(f"保持绑定：{short}", "keep")
-        self.folder_mode.addItem("按规则自动创建（默认）", "auto")
+            self.folder_mode.addItem(
+                tr("保持绑定：{path}").replace("{path}", short), "keep")
         base = (self.config.get("base_folder") if self.config else None) \
             or core.DEFAULT_BASE_FOLDER
+        rules_list = core.folder_rules_list(
+            self.config.get("folder_rules", default={}) if self.config else {})
+        for i, rule in enumerate(rules_list):
+            name = rule.get("name") or f"规则{i + 1}"
+            self.folder_mode.addItem(
+                tr("按规则「{name}」创建").replace("{name}", name), f"rule:{i}")
         for name in ((self.config.get("custom_folders") if self.config else None) or []):
             self.folder_mode.addItem(f"📂 {name}", core.custom_folder_path(base, name))
-        self.folder_mode.addItem("自定义选择文件夹…", "manual")
+        self.folder_mode.addItem(tr("自定义选择文件夹…"), "manual")
         if existing_folder:
             self.folder_mode.setCurrentIndex(0)          # 保持绑定
         else:
             self.folder_mode.setCurrentIndex(
-                self.folder_mode.findData("auto"))        # 默认按规则自动创建
+                self.folder_mode.findData("rule:0"))      # 默认第一条生成规则
         self.body.addLayout(_form_row("文件夹", self.folder_mode))
 
         self.folder_row = QWidget()
         fl = QHBoxLayout(self.folder_row)
         fl.setContentsMargins(0, 0, 0, 0)
-        self.folder_edit = QLineEdit(placeholderText="选择要绑定的已有文件夹")
-        btn_browse = QPushButton("浏览…", fixedWidth=64)
+        self.folder_edit = QLineEdit(placeholderText=tr("选择要绑定的已有文件夹"))
+        btn_browse = QPushButton(tr("浏览…"), fixedWidth=64)
 
         def _browse():
-            d = QFileDialog.getExistingDirectory(self, "选择要绑定的文件夹")
+            d = QFileDialog.getExistingDirectory(self, tr("选择要绑定的文件夹"))
             if d:
                 self.folder_edit.setText(d)
         btn_browse.clicked.connect(_browse)
@@ -212,9 +228,9 @@ class ItemEditDialog(FramelessDialog):
         # ---- 按钮
         row = QHBoxLayout()
         row.addStretch()
-        btn_cancel = QPushButton("取消")
+        btn_cancel = QPushButton(tr("取消"))
         btn_cancel.clicked.connect(self.reject)
-        btn_ok = QPushButton("保存", objectName="AccentButton")
+        btn_ok = QPushButton(tr("保存"), objectName="AccentButton")
         btn_ok.setDefault(True)              # 回车 = 保存
         btn_ok.clicked.connect(self._save)
         row.addWidget(btn_cancel)
@@ -237,7 +253,7 @@ class ItemEditDialog(FramelessDialog):
         title = self.title_edit.text().strip()
         if not title:
             self.title_edit.setFocus()
-            self.title_edit.setPlaceholderText("⚠ 名称不能为空")
+            self.title_edit.setPlaceholderText(tr("⚠ 名称不能为空"))
             return
         tags = [s.strip() for s in self.tags_edit.text().replace("，", ",").split(",")
                 if s.strip()]
@@ -253,13 +269,18 @@ class ItemEditDialog(FramelessDialog):
                 it["created"] = core.dt_str(qdt.replace(second=0, microsecond=0))
             elif self.item is None:
                 it["created"] = core.dt_str(core.now())
-        # 文件夹绑定方式（默认自定义：选自定义子文件夹或手动指定）
+        # 文件夹绑定方式（默认按所选生成规则，规则在 设置→文件夹 中自定义）
         fmode = self.folder_mode.currentData()
         if fmode == "manual":
             p = self.folder_edit.text().strip()
             it["folder"] = p if p else None
-        elif fmode == "auto":
+        elif isinstance(fmode, str) and fmode.startswith("rule:"):
+            rules_list = core.folder_rules_list(
+                self.config.get("folder_rules", default={}) if self.config else {})
+            idx = int(fmode.split(":", 1)[1])
+            idx = idx if idx < len(rules_list) else 0
             it["folder"] = None
+            it["folder_rule"] = rules_list[idx].get("name") or None
         elif fmode == "keep":
             pass                                       # 保持原绑定不变
         else:
@@ -296,14 +317,14 @@ class ReminderEditDialog(FramelessDialog):
     saved = Signal(object)
 
     def __init__(self, parent, t: dict, item: dict | None = None):
-        action = "编辑" if item else "添加"
-        super().__init__(parent, t, f"{action}提醒", width=400)
+        super().__init__(parent, t, tr("编辑提醒") if item else tr("添加提醒"),
+                         width=400)
         self.setWindowModality(Qt.NonModal)
         self.item = item
         self.result_item = None
 
         self.title_edit = QLineEdit(item["title"] if item else "")
-        self.title_edit.setPlaceholderText("请输入提醒内容，如：开周会…")
+        self.title_edit.setPlaceholderText(tr("请输入提醒内容，如：开周会…"))
         self.body.addLayout(_form_row("提醒", self.title_edit))
 
         rt = core.parse_dt(item["remind_time"]) if item else \
@@ -315,21 +336,21 @@ class ReminderEditDialog(FramelessDialog):
 
         self.advance = QComboBox()
         for name, v in ADVANCE_OPTIONS[:-1]:
-            self.advance.addItem(name, v)
+            self.advance.addItem(_advance_text(name), v)
         cur = (item or {}).get("remind_advance")
         idx = next((i for i, (_, v) in enumerate(ADVANCE_OPTIONS[:-1]) if v == cur), 0)
         self.advance.setCurrentIndex(idx)
         self.body.addLayout(_form_row("提前提醒", self.advance))
 
-        tip = QLabel("到点后将在右下角弹窗提醒，无需绑定文件夹。")
+        tip = QLabel(tr("到点后将在右下角弹窗提醒，无需绑定文件夹。"))
         tip.setWordWrap(True)
         self.body.addWidget(tip)
 
         row = QHBoxLayout()
         row.addStretch()
-        btn_cancel = QPushButton("取消")
+        btn_cancel = QPushButton(tr("取消"))
         btn_cancel.clicked.connect(self.reject)
-        btn_ok = QPushButton("保存", objectName="AccentButton")
+        btn_ok = QPushButton(tr("保存"), objectName="AccentButton")
         btn_ok.setDefault(True)              # 回车 = 保存
         btn_ok.clicked.connect(self._save)
         row.addWidget(btn_cancel)
@@ -341,7 +362,7 @@ class ReminderEditDialog(FramelessDialog):
         title = self.title_edit.text().strip()
         if not title:
             self.title_edit.setFocus()
-            self.title_edit.setPlaceholderText("⚠ 内容不能为空")
+            self.title_edit.setPlaceholderText(tr("⚠ 内容不能为空"))
             return
         if self.item:
             it = self.item
@@ -363,7 +384,7 @@ class DetailDialog(FramelessDialog):
 
     def __init__(self, parent, t: dict, store: core.DataStore, item: dict,
                  config: core.Config):
-        super().__init__(parent, t, "事项详情", width=440)
+        super().__init__(parent, t, tr("事项详情"), width=440)
         self.setWindowModality(Qt.NonModal)
         self.store, self.item, self.config = store, item, config
         self._build()
@@ -382,9 +403,11 @@ class DetailDialog(FramelessDialog):
                     if w2.widget():
                         w2.widget().deleteLater()
 
-        type_name = core.TYPE_NAMES[it["type"]]
-        prio_name = core.PRIORITIES.get(it.get("priority", "mid"), "中")
-        info = QLabel(f"类型：{type_name}    优先级：{prio_name}\n创建：{it.get('created', '-')}")
+        type_name = core.type_name(it["type"])
+        prio_name = core.priority_name(it.get("priority", "mid"))
+        info = QLabel(tr("类型：{t}    优先级：{p}\n创建：{c}")
+                      .replace("{t}", type_name).replace("{p}", prio_name)
+                      .replace("{c}", it.get("created", "-")))
         self.body.addWidget(info)
 
         title = QLabel(it["title"], wordWrap=True)
@@ -394,25 +417,29 @@ class DetailDialog(FramelessDialog):
         if it["type"] == "todo":
             dl = core.parse_dt(it.get("deadline"))
             self.body.addWidget(QLabel(
-                f"截止时间：{it['deadline'] if dl else '未设置'}"))
-            self.chk_done = QCheckBox("已完成")
+                tr("截止时间：{d}").replace("{d}", it['deadline'] if dl else tr("未设置"))))
+            self.chk_done = QCheckBox(tr("已完成"))
             self.chk_done.setChecked(it.get("done", False))
             self.chk_done.toggled.connect(self._todo_done)
             self.body.addWidget(self.chk_done)
 
         if it["type"] == "recur":
-            self.body.addWidget(QLabel(f"周期：{core.recur_desc(it)}"))
+            self.body.addWidget(QLabel(
+                tr("周期：{desc}").replace("{desc}", core.recur_desc(it))))
             pend = core.pending_instance(it)
             if pend:
-                self.body.addWidget(QLabel(f"当期应完成：{pend}（未完成）"))
-                btn = QPushButton("✔ 完成当期任务", objectName="AccentButton")
+                self.body.addWidget(QLabel(
+                    tr("当期应完成：{p}（未完成）").replace("{p}", pend)))
+                btn = QPushButton(tr("✔ 完成当期任务"), objectName="AccentButton")
                 btn.clicked.connect(self._complete_instance)
                 self.body.addWidget(btn)
             else:
                 self.body.addWidget(QLabel(
-                    f"下一次提醒：{core.dt_str(core.next_occur(it, core.now()))}"))
+                    tr("下一次提醒：{n}").replace(
+                        "{n}", core.dt_str(core.next_occur(it, core.now())))))
             hist = it.get("completed_instances", [])
-            self.body.addWidget(QLabel(f"历史完成次数：{len(hist)}"))
+            self.body.addWidget(QLabel(
+                tr("历史完成次数：{n}").replace("{n}", str(len(hist)))))
             if hist:
                 lw = QListWidget(maximumHeight=110)
                 for h in sorted(hist, reverse=True)[:30]:
@@ -421,7 +448,7 @@ class DetailDialog(FramelessDialog):
 
         # 标签
         row = QHBoxLayout()
-        row.addWidget(QLabel("标签"))
+        row.addWidget(QLabel(tr("标签")))
         self.tags_edit = QLineEdit(", ".join(it.get("tags", [])))
         self.tags_edit.editingFinished.connect(self._tags_changed)
         row.addWidget(self.tags_edit, 1)
@@ -429,16 +456,16 @@ class DetailDialog(FramelessDialog):
 
         # 文件夹
         folder = it.get("folder")
-        self.folder_lbl = QLabel(folder or "未绑定文件夹", wordWrap=True)
+        self.folder_lbl = QLabel(folder or tr("未绑定文件夹"), wordWrap=True)
         if folder:
             self.folder_lbl.setStyleSheet(f"color:{self.t['accent']};")
         self.body.addWidget(self.folder_lbl)
         frow = QHBoxLayout()
-        btn_open = QPushButton("📂 打开/创建")
+        btn_open = QPushButton(tr("📂 打开/创建"))
         btn_open.clicked.connect(self._open_folder)
-        btn_bind = QPushButton("重新绑定")
+        btn_bind = QPushButton(tr("重新绑定"))
         btn_bind.clicked.connect(self._rebind)
-        btn_unbind = QPushButton("解除绑定")
+        btn_unbind = QPushButton(tr("解除绑定"))
         btn_unbind.clicked.connect(self._unbind)
         frow.addWidget(btn_open)
         frow.addWidget(btn_bind)
@@ -447,7 +474,7 @@ class DetailDialog(FramelessDialog):
         self.body.addLayout(frow)
 
         brow = QHBoxLayout()
-        btn_edit = QPushButton("✏ 编辑", objectName="AccentButton")
+        btn_edit = QPushButton(tr("✏ 编辑"), objectName="AccentButton")
         btn_edit.setDefault(True)            # 回车 = 编辑
         btn_edit.clicked.connect(self._edit)
         brow.addStretch()
@@ -484,8 +511,9 @@ class DetailDialog(FramelessDialog):
         folder = self.item.get("folder")
         if not folder or not os.path.isdir(folder):
             base = self.config.get("base_folder", default=core.DEFAULT_BASE_FOLDER)
-            folder = core.create_bound_folder(
-                self.item, base, self.config.get("folder_rules", default={}))
+            rules = self.config.get("folder_rules", default={})
+            idx = core.folder_rule_index(rules, self.item.get("folder_rule"))
+            folder = core.create_bound_folder(self.item, base, rules, rule_index=idx)
             self.item["folder"] = folder
             self._refresh()
         core.open_folder(folder)
@@ -513,7 +541,7 @@ class ReminderDialog(FramelessDialog):
     action = Signal(str, int)     # ("done"/"snooze"/"close", minutes)
 
     def __init__(self, parent, t: dict, item: dict, message: str):
-        super().__init__(parent, t, "⏰ 提醒", width=360, closable=False)
+        super().__init__(parent, t, tr("⏰ 提醒"), width=360, closable=False)
         self.item = item
         self.setWindowFlag(Qt.WindowStaysOnTopHint)
         lbl = QLabel(message, wordWrap=True)
@@ -523,28 +551,28 @@ class ReminderDialog(FramelessDialog):
         name.setStyleSheet(f"font-weight:bold;color:{t['accent']};")
         self.body.addWidget(name)
 
-        btn_done = QPushButton("✔ 完成", objectName="AccentButton")
+        btn_done = QPushButton(tr("✔ 完成"), objectName="AccentButton")
         btn_done.clicked.connect(lambda: self._emit("done", 0))
         self.body.addWidget(btn_done)
 
         row = QHBoxLayout()
         for text, mins in [("5分钟后", 5), ("30分钟后", 30), ("1小时后", 60)]:
-            b = QPushButton(text)
+            b = QPushButton(tr(text))
             b.clicked.connect(lambda _=False, m=mins: self._emit("snooze", m))
             row.addWidget(b)
         self.body.addLayout(row)
 
         row2 = QHBoxLayout()
         self.custom_spin = QSpinBox(minimum=1, maximum=1440, value=15,
-                                    suffix=" 分钟后")
-        btn_custom = QPushButton("自定义稍后")
+                                    suffix=tr(" 分钟后"))
+        btn_custom = QPushButton(tr("自定义稍后"))
         btn_custom.clicked.connect(
             lambda: self._emit("snooze", self.custom_spin.value()))
         row2.addWidget(self.custom_spin, 1)
         row2.addWidget(btn_custom)
         self.body.addLayout(row2)
 
-        btn_close = QPushButton("关闭", objectName="FlatButton")
+        btn_close = QPushButton(tr("关闭"), objectName="FlatButton")
         btn_close.clicked.connect(lambda: self._emit("close", 0))
         self.body.addWidget(btn_close)
 

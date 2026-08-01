@@ -8,6 +8,7 @@ import os
 from ctypes import wintypes
 
 import theme as theme_mod
+from i18n import tr
 
 from PySide6.QtCore import QEvent, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import (QColor, QCursor, QGuiApplication, QImage,
@@ -143,6 +144,23 @@ def set_click_through(win: QWidget, enable: bool):
     win.setAttribute(Qt.WA_TransparentForMouseEvents, enable)
 
 
+def set_window_z_order(win: QWidget, topmost: bool):
+    """Win32 强制窗口置顶/解除置顶。
+    Qt 的 WindowStaysOnTopHint 在 Tool 窗口上偶尔不生效，这里直接 SetWindowPos 兜底。
+    注意：必须声明 argtypes，否则 HWND_TOPMOST(-1) 会被 ctypes 按 32 位传参导致失败。"""
+    try:
+        user32 = ctypes.windll.user32
+        hwnd = wintypes.HWND(int(win.winId()))
+        SWP_NOSIZE, SWP_NOMOVE, SWP_NOACTIVATE = 0x0001, 0x0002, 0x0010
+        user32.SetWindowPos.argtypes = [
+            wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int,
+            ctypes.c_int, ctypes.c_int, ctypes.c_uint]
+        user32.SetWindowPos(hwnd, wintypes.HWND(-1 if topmost else -2),
+                            0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE)
+    except Exception:
+        pass
+
+
 # ---------------------------------------------------------------- 矢量图标按钮
 class _VectorButton(QPushButton):
     """用 QPainter 绘制矢量图标的按钮（比文本符号更清晰可缩放）。"""
@@ -220,7 +238,7 @@ class FramelessDialog(QDialog):
         if closable:
             btn_close = CloseIconButton(objectName="CloseButton", fixedWidth=30)
             btn_close.setFixedHeight(26)
-            btn_close.setToolTip("关闭")
+            btn_close.setToolTip(tr("关闭"))
             btn_close.setAutoDefault(False)   # 防止回车触发 ✕ 误关对话框
             btn_close.clicked.connect(self.reject)
             bar.addWidget(btn_close)
@@ -435,7 +453,7 @@ class Toast(QWidget):
 # ---------------------------------------------------------------- 确认对话框（防误删）
 class ConfirmDialog(FramelessDialog):
     def __init__(self, parent, t, title, message, checkbox: str | None = None,
-                 ok_text="确定", danger=True):
+                 ok_text="确定", danger=True, warn_checkbox=False):
         super().__init__(parent, t, title, width=420)
         from PySide6.QtWidgets import QCheckBox
         lbl = QLabel(message, wordWrap=True)
@@ -444,6 +462,11 @@ class ConfirmDialog(FramelessDialog):
         if checkbox:
             self.checkbox = QCheckBox(checkbox)
             self.checkbox.setChecked(False)
+            if warn_checkbox:
+                # 危险选项：红色加粗警告
+                self.checkbox.setStyleSheet(
+                    "QCheckBox{color:#ff5c6c;font-weight:bold;}"
+                    "QCheckBox::indicator{border:1px solid #ff5c6c;}")
             self.body.addWidget(self.checkbox)
         row = QHBoxLayout()
         row.addStretch()
@@ -462,10 +485,47 @@ class ConfirmDialog(FramelessDialog):
         btn_yes.setDefault(True)
 
     @classmethod
-    def ask(cls, parent, t, title, message, checkbox=None, ok_text="确定"):
-        d = cls(parent, t, title, message, checkbox, ok_text)
+    def ask(cls, parent, t, title, message, checkbox=None, ok_text="确定",
+            warn_checkbox=False):
+        d = cls(parent, t, title, message, checkbox, ok_text, True, warn_checkbox)
         ok = d.exec() == QDialog.Accepted
         return ok, (d.checkbox.isChecked() if d.checkbox else False)
+
+
+class CountdownDialog(FramelessDialog):
+    """危险操作二次确认：倒计时结束前「确定」不可点击，防误操作。"""
+
+    def __init__(self, parent, t, title, message, seconds: int = 5,
+                 ok_text="确定"):
+        super().__init__(parent, t, title, width=440)
+        lbl = QLabel(message, wordWrap=True)
+        self.body.addWidget(lbl)
+        self.count_lbl = QLabel(alignment=Qt.AlignCenter)
+        self.count_lbl.setStyleSheet("font-size:14pt;font-weight:bold;padding:8px;")
+        self.body.addWidget(self.count_lbl)
+        row = QHBoxLayout()
+        row.addStretch()
+        btn_no = QPushButton("取消")
+        btn_no.clicked.connect(self.reject)
+        self.btn_yes = QPushButton(ok_text, objectName="AccentButton")
+        self.btn_yes.clicked.connect(self.accept)
+        row.addWidget(btn_no)
+        row.addWidget(self.btn_yes)
+        self.body.addLayout(row)
+        self._left = int(seconds)
+        self._timer = QTimer(self, interval=1000, timeout=self._tick)
+        self._timer.start()
+        self._tick()
+
+    def _tick(self):
+        if self._left <= 0:
+            self._timer.stop()
+            self.btn_yes.setEnabled(True)
+            self.count_lbl.setText("倒计时结束，请再次确认：确定执行该操作")
+        else:
+            self.btn_yes.setEnabled(False)
+            self.count_lbl.setText(f"⚠ {self._left} 秒后可点击「{self.btn_yes.text()}」…")
+            self._left -= 1
 
 
 # ---------------------------------------------------------------- 屏幕吸管取色
@@ -537,7 +597,7 @@ class ColorDialog(FramelessDialog):
     """颜色选择：预览 + 十六进制输入 + 透明度滑条 + 屏幕吸管。"""
 
     def __init__(self, parent, t, initial: QColor, with_alpha=True):
-        super().__init__(parent, t, "选择颜色", width=360)
+        super().__init__(parent, t, tr("选择颜色"), width=360)
         self.color = QColor(initial)
         self.with_alpha = with_alpha
 
@@ -545,14 +605,14 @@ class ColorDialog(FramelessDialog):
         self.preview = QFrame(fixedWidth=52, fixedHeight=36)
         row.addWidget(self.preview)
         self.hex_edit = QLineEdit(self.color.name(QColor.HexArgb).upper())
-        self.hex_edit.setPlaceholderText("#RRGGBB 或 #AARRGGBB")
+        self.hex_edit.setPlaceholderText(tr("#RRGGBB 或 #AARRGGBB"))
         self.hex_edit.editingFinished.connect(self._from_hex)
         row.addWidget(self.hex_edit, 1)
         self.body.addLayout(row)
 
         if with_alpha:
             ar = QHBoxLayout()
-            ar.addWidget(QLabel("不透明度"))
+            ar.addWidget(QLabel(tr("不透明度")))
             self.alpha_slider = QSlider(Qt.Horizontal, minimum=20, maximum=255,
                                         value=self.color.alpha())
             self.alpha_slider.valueChanged.connect(self._from_slider)
@@ -577,14 +637,14 @@ class ColorDialog(FramelessDialog):
         self.body.addLayout(grid)
 
         row2 = QHBoxLayout()
-        btn_pick = QPushButton("🖊 吸取屏幕颜色")
+        btn_pick = QPushButton(tr("🖊 吸取屏幕颜色"))
         btn_pick.clicked.connect(self._pick_screen)
         row2.addWidget(btn_pick)
         row2.addStretch()
-        btn_ok = QPushButton("确定", objectName="AccentButton")
+        btn_ok = QPushButton(tr("确定"), objectName="AccentButton")
         btn_ok.setDefault(True)              # 回车 = 确定
         btn_ok.clicked.connect(self.accept)
-        btn_cancel = QPushButton("取消")
+        btn_cancel = QPushButton(tr("取消"))
         btn_cancel.clicked.connect(self.reject)
         row2.addWidget(btn_cancel)
         row2.addWidget(btn_ok)
@@ -667,7 +727,7 @@ class HotkeyEdit(QLineEdit):
     def __init__(self, combo: list[str] | None = None, parent=None):
         super().__init__(parent)
         self.setReadOnly(True)
-        self.setPlaceholderText("点击后按下组合键…")
+        self.setPlaceholderText(tr("点击后按下组合键…"))
         self._combo: list[str] = list(combo or [])
         self._active: set[str] = set()
         self._down: set[str] = set()
