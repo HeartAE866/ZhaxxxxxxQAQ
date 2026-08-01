@@ -4,8 +4,9 @@
 A frameless, frosted-glass floating widget on your desktop: auto-created project folders, work logs, todos, recurring tasks, reminders, and an off-work countdown.
 
 **完全本地离线运行，不联网、不收集任何信息 · 100% local and offline — no accounts, no cloud, no tracking.**
+（可选：启动时可检查 GitHub 更新，仅访问官方公开接口 · Optional: startup update check, connects only to the public GitHub API）
 
-![Version](https://img.shields.io/badge/version-v1.1.4-blue)
+![Version](https://img.shields.io/badge/version-v1.1.5-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Python](https://img.shields.io/badge/Python-3.14+-8A2BE2)
 ![PySide6](https://img.shields.io/badge/UI-PySide6-4fc3f7)
@@ -43,12 +44,13 @@ A frameless, frosted-glass floating widget on your desktop: auto-created project
 - **Compact mode**: collapse into a mini bar showing the most urgent item; click to expand, drag to move
 - **Data management**: full-text search, type filters, JSON/CSV export/import (duplicate-safe), guarded deletion, tag manager, recurring history
 - **🌐 Bilingual**: Simplified Chinese / English UI, switchable in Settings → Personalization
+- **🔄 Auto-update**: checks GitHub Releases on startup; one-click download & install when a new version is found (Settings → About to toggle / check manually)
 - **Lightweight**: ~0% CPU when idle, ~19 MB installer
 
 ### Install
 
 Download the latest installer from [Releases](https://github.com/HeartAE866/ZhaxxxxxxQAQ/releases)
-(`ZhaxxxxxxQAQ_Setup_v1.1.4.exe`) and run it.
+(`ZhaxxxxxxQAQ_Setup_v1.1.5.exe`) and run it.
 
 > Windows 10/11 (64-bit). Fully offline — uninstall by deleting the app folder.
 
@@ -81,12 +83,13 @@ Download the latest installer from [Releases](https://github.com/HeartAE866/Zhax
 - **紧凑模式**：缩成迷你悬浮条只显示最紧急事项，点击展开；长按拖拽移动、边缘横向缩放
 - **数据管理**：全文搜索、类型筛选、JSON/CSV 导出导入（防重复）、防误删确认、标签管理、循环完成历史
 - **🌐 中英双语**：设置 → 个性化 可切换简体中文 / English，全球用户均可使用
+- **🔄 自动更新**：启动时检查 GitHub Releases，发现新版本一键下载安装（设置 → 关于 可关闭/手动检查）
 - **轻量**：待机 CPU 占用接近 0，安装包约 19MB
 
 ### 安装
 
 在 [Releases](https://github.com/HeartAE866/ZhaxxxxxxQAQ/releases) 下载最新版安装包
-（`ZhaxxxxxxQAQ_Setup_v1.1.4.exe`），双击安装即可。
+（`ZhaxxxxxxQAQ_Setup_v1.1.5.exe`），双击安装即可。
 
 > Windows 10/11（64 位）。完全本地离线，卸载只需删除安装目录。
 

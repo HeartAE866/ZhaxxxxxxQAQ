@@ -413,4 +413,20 @@ _TRANSLATIONS = {
         "Select the subfolders to delete first (multi-select)",
     "创建": "Created",
     "读取失败: {e}": "Read failed: {e}",
+
+    # ---------------- 自动更新 ----------------
+    "发现新版本": "New Version Available",
+    "发现新版本 {v}，是否立即更新？": "New version {v} is available. Update now?",
+    "稍后": "Later",
+    "忽略此版本": "Ignore This Version",
+    "立即更新": "Update Now",
+    "正在下载更新…": "Downloading update…",
+    "下载失败：{e}": "Download failed: {e}",
+    "下载完成，正在启动安装…": "Download complete, launching installer…",
+    "正在检查更新…": "Checking for updates…",
+    "已是最新版本": "You're up to date",
+    "软件更新": "Software Update",
+    "启动时检查更新（仅连接 GitHub Releases 公共接口，不收集任何信息）":
+        "Check for updates on startup (connects only to the public GitHub Releases API, no data collected)",
+    "检查更新": "Check for Updates",
 }

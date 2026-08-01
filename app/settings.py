@@ -1331,6 +1331,9 @@ class SettingsWindow(FramelessDialog):
             shutil.copy2(src, dst)
             Toast.show_text(tr("日志已复制到 导出 目录"))
 
+    def _upd_check_changed(self, v):
+        self.app.config.set("update", "check", bool(v))
+
     # ================================================================ 关于
     def _page_about(self):
         w = QWidget()
@@ -1345,6 +1348,21 @@ class SettingsWindow(FramelessDialog):
         lay.addWidget(QLabel(tr("轻量桌面工作记事录 · 完全本地离线")))
         lay.addSpacing(6)
         lay.addWidget(QLabel(tr("作者：你的好邻居\n联系邮箱：1559573443@qq.com\nQQ：1559573443")))
+        # 软件更新（自动检查 GitHub Releases）
+        up_sep = QLabel(tr("软件更新"))
+        up_sep.setStyleSheet(f"font-weight:bold;margin-top:10px;color:{self.t['accent']};")
+        lay.addWidget(up_sep)
+        self.upd_check_chk = QCheckBox(tr("启动时检查更新（仅连接 GitHub Releases 公共接口，不收集任何信息）"))
+        self.upd_check_chk.setChecked(
+            bool(self.app.config.get("update", "check", default=True)))
+        self.upd_check_chk.toggled.connect(self._upd_check_changed)
+        lay.addWidget(self.upd_check_chk)
+        urow = QHBoxLayout()
+        btn_check = QPushButton(tr("检查更新"))
+        btn_check.clicked.connect(lambda: self.app.check_updates(manual=True))
+        urow.addWidget(btn_check)
+        urow.addStretch()
+        lay.addLayout(urow)
         # 打赏作者（下移三行，与上方信息隔开）
         lay.addSpacing(45)
         donate = QLabel(tr("打赏作者"))

@@ -3,7 +3,7 @@
 A frameless, frosted-glass floating widget that sits on your desktop: work logs, todos, recurring tasks, reminders, and an off-work countdown.
 **100% local and offline** — all data stays in the app folder. No accounts, no cloud, no tracking.
 
-![Version](https://img.shields.io/badge/version-v1.1.4-blue)
+![Version](https://img.shields.io/badge/version-v1.1.5-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Python](https://img.shields.io/badge/Python-3.14+-8A2BE2)
 ![PySide6](https://img.shields.io/badge/UI-PySide6-4fc3f7)
@@ -45,7 +45,7 @@ A frameless, frosted-glass floating widget that sits on your desktop: work logs,
 ## Install
 
 Download the latest installer from [Releases](https://github.com/HeartAE866/ZhaxxxxxxQAQ/releases)
-(`ZhaxxxxxxQAQ_Setup_v1.1.4.exe`) and run it.
+(`ZhaxxxxxxQAQ_Setup_v1.1.5.exe`) and run it.
 
 > Windows 10/11 (64-bit). Fully offline — uninstall by deleting the app folder.
 

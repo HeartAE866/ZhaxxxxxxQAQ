@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (QApplication, QFrame, QLabel, QSystemTrayIcon,
 import core
 import i18n
 import theme as theme_mod
+import updater
 from core import log
 from i18n import tr
 from editor import DetailDialog, ItemEditDialog, ReminderDialog, ReminderEditDialog
@@ -131,6 +132,10 @@ class App(QObject):
         self.snoozed: dict[str, object] = {}
         self._reminder_dialogs: list = []
         self.settings_win: SettingsWindow | None = None
+        self._update_nagged = False
+        self._update_check_manual = False
+        self.update_checker = updater.UpdateCheck()
+        self.update_checker.result.connect(self._update_result)
 
         self.win = FloatWindow(self)
         self._build_tray()
@@ -147,6 +152,41 @@ class App(QObject):
         if self.config.get("autostart", default=True) and not core.autostart_enabled():
             core.set_autostart(True)
         log.info(f"{core.APP_NAME} v{core.APP_VERSION} 启动")
+
+        # 自动更新检查（启动 4 秒后静默进行）
+        QTimer.singleShot(4000, self.check_updates)
+
+    # ---------------------------------------------------------------- 更新
+    def check_updates(self, manual: bool = False):
+        """检查 GitHub Releases 是否有新版本；manual=True 时来自设置页按钮。"""
+        if not manual and not self.config.get("update", "check", default=True):
+            return
+        if not manual and self._update_nagged:
+            return
+        self._update_check_manual = manual
+        if manual:
+            Toast.show_text(tr("正在检查更新…"))
+        self.update_checker.run()
+
+    def _update_result(self, res):
+        if not res:
+            if self._update_check_manual:
+                Toast.show_text(tr("已是最新版本"))
+            return
+        tag, url, name, body = res
+        if updater.version_tuple(tag) <= updater.version_tuple(core.APP_VERSION):
+            if self._update_check_manual:
+                Toast.show_text(tr("已是最新版本"))
+            return
+        if tag == self.config.get("update", "ignored_version", default=""):
+            return
+        self._update_nagged = True
+        log.info(f"发现新版本: {tag}")
+        d = updater.UpdateDialog(self.win, self.t, tag, url, name, body)
+        d.ignored.connect(
+            lambda: self.config.set("update", "ignored_version", tag))
+        d.install_requested.connect(self.quit)
+        d.show()
 
     # ---------------------------------------------------------------- 托盘
     def _build_tray(self):
