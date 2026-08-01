@@ -20,3 +20,6 @@ logs/
 
 # 开发工具配置
 AGENTS.md
+
+# 截图源文件（发布用副本在 docs/screenshots/）
+截屏文件夹/
