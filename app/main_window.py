@@ -3,7 +3,6 @@
 折叠/展开、拖拽排序、搜索、边缘缩放、紧凑模式。"""
 from __future__ import annotations
 
-import os
 from datetime import date, datetime, timedelta
 
 from PySide6.QtCore import QEvent, QRect, Qt, QTimer
@@ -14,7 +13,7 @@ from PySide6.QtWidgets import (QFrame, QHBoxLayout, QLabel, QLineEdit,
 import core
 import theme as theme_mod
 from i18n import tr, current_lang
-from widgets import (BgFrame, CloseIconButton, CompactIconButton, styled_menu,
+from widgets import (BgFrame, CompactIconButton,
                      set_click_through, set_window_z_order, apply_frosted,
                      apply_window_corners)
 
@@ -260,6 +259,8 @@ class FloatWindow(QWidget):
         self._indicator = None
         self._resize_dir = None
         self._resize_start = None
+        self._compact_pressed = False
+        self._compact_moved = False
         self._rows: list[ItemRow] = []
         self.setWindowTitle(core.APP_NAME)
         self.setMinimumWidth(240)
@@ -393,7 +394,7 @@ class FloatWindow(QWidget):
             self._compact_moved = False
 
     def _compact_move(self, e):
-        if getattr(self, "_compact_pressed", False) and e.buttons() & Qt.LeftButton:
+        if self._compact_pressed and e.buttons() & Qt.LeftButton:
             g = e.globalPosition().toPoint()
             if not self._compact_moved and \
                     (g - self.pos() - self._move_pos).manhattanLength() > 5:

@@ -13,7 +13,7 @@ from i18n import tr
 from PySide6.QtCore import QEvent, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import (QColor, QCursor, QGuiApplication, QImage,
                            QKeySequence, QPainter, QPainterPath, QPen, QPixmap)
-from PySide6.QtWidgets import (QDialog, QFrame, QGridLayout,
+from PySide6.QtWidgets import (QCheckBox, QDialog, QFrame, QGridLayout,
                                QHBoxLayout, QLabel, QLineEdit, QMenu,
                                QPushButton, QSlider, QVBoxLayout, QWidget)
 
@@ -455,7 +455,6 @@ class ConfirmDialog(FramelessDialog):
     def __init__(self, parent, t, title, message, checkbox: str | None = None,
                  ok_text="确定", danger=True, warn_checkbox=False):
         super().__init__(parent, t, title, width=420)
-        from PySide6.QtWidgets import QCheckBox
         lbl = QLabel(message, wordWrap=True)
         self.body.addWidget(lbl)
         self.checkbox = None

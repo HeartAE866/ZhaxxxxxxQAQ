@@ -129,6 +129,7 @@ class App(QObject):
         self.qapp.setWindowIcon(QIcon(core.ICON_PATH))
 
         self.snoozed: dict[str, object] = {}
+        self._reminder_dialogs: list = []
         self.settings_win: SettingsWindow | None = None
 
         self.win = FloatWindow(self)
@@ -481,7 +482,6 @@ class App(QObject):
         except Exception:
             pass
         d = ReminderDialog(self.win, self.t, item, message)
-        self._reminder_dialogs = getattr(self, "_reminder_dialogs", [])
         self._reminder_dialogs.append(d)
         d.action.connect(lambda act, mins, it=item: self._reminder_done(it, act, mins))
         d.finished.connect(lambda _=None, dd=d: self._reminder_dialogs.remove(dd)

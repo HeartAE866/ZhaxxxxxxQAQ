@@ -9,19 +9,14 @@ from PySide6.QtCore import QDateTime, Qt, QTime, Signal
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDateTimeEdit,
                                QFileDialog, QHBoxLayout, QLabel, QLineEdit,
                                QListWidget, QPushButton, QSpinBox, QTimeEdit,
-                               QVBoxLayout, QWidget)
-
+                               QWidget)
 import core
 from i18n import tr
-from widgets import FramelessDialog, ConfirmDialog
+from widgets import FramelessDialog
 
 ADVANCE_OPTIONS = [("截止时提醒", 0), ("提前5分钟", 5), ("提前15分钟", 15),
                    ("提前30分钟", 30), ("提前1小时", 60), ("提前1天", 1440),
                    ("不提醒", -1)]
-
-
-def _advance_text(name: str) -> str:
-    return tr(name)
 
 
 def _form_row(label: str, widget: QWidget) -> QHBoxLayout:
@@ -111,7 +106,7 @@ class ItemEditDialog(FramelessDialog):
 
             self.advance = QComboBox()
             for name, v in ADVANCE_OPTIONS:
-                self.advance.addItem(_advance_text(name), v)
+                self.advance.addItem(tr(name), v)
             cur = (item or {}).get("remind_advance")
             idx = next((i for i, (_, v) in enumerate(ADVANCE_OPTIONS) if v == cur), 0)
             self.advance.setCurrentIndex(idx)
@@ -336,7 +331,7 @@ class ReminderEditDialog(FramelessDialog):
 
         self.advance = QComboBox()
         for name, v in ADVANCE_OPTIONS[:-1]:
-            self.advance.addItem(_advance_text(name), v)
+            self.advance.addItem(tr(name), v)
         cur = (item or {}).get("remind_advance")
         idx = next((i for i, (_, v) in enumerate(ADVANCE_OPTIONS[:-1]) if v == cur), 0)
         self.advance.setCurrentIndex(idx)

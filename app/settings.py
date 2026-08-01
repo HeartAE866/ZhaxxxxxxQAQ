@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """设置窗口：个性化 / 文件夹 / 提醒 / 快捷键 / 数据管理 / 日志 / 关于。"""
 from __future__ import annotations
 
@@ -11,7 +11,8 @@ from datetime import datetime
 from PySide6.QtCore import QTime, QTimer, Qt, Signal
 from PySide6.QtGui import QColor, QFontDatabase, QPixmap
 from PySide6.QtWidgets import (QButtonGroup, QCheckBox, QComboBox, QDialog,
-                               QFileDialog, QFrame, QHBoxLayout, QLabel,
+                               QFileDialog, QFrame, QGridLayout, QHBoxLayout, QLabel,
+                               QInputDialog,
                                QLineEdit, QListWidget, QListWidgetItem,
                                QPushButton, QScrollArea, QSizePolicy, QSlider,
                                QStackedWidget, QTextEdit, QTimeEdit,
@@ -155,7 +156,6 @@ class SettingsWindow(FramelessDialog):
         self.color_hint = QLabel()
         lay.addWidget(self.color_hint)
         grid_w = QWidget()
-        from PySide6.QtWidgets import QGridLayout
         self._color_grid = QGridLayout(grid_w)
         self._color_grid.setHorizontalSpacing(14)
         self._color_btns = {}
@@ -213,7 +213,6 @@ class SettingsWindow(FramelessDialog):
         dlab = QLabel(tr("各部件背景（纯色或图片，留空=透明显示下层背景）"))
         dlab.setStyleSheet(f"color:{theme_mod.rgba(self.t['text'], 160)};")
         dbox.addWidget(dlab)
-        from PySide6.QtWidgets import QGridLayout
         self.diy_grid = QGridLayout()
         self.diy_grid.setHorizontalSpacing(6)
         self._diy_btns = {}
@@ -465,7 +464,6 @@ class SettingsWindow(FramelessDialog):
             self._diy_update_comp(key, color=c.name(), image="")
 
     def _pick_diy_comp_image(self, key):
-        from PySide6.QtWidgets import QFileDialog
         path, _ = QFileDialog.getOpenFileName(
             self, "选择部件背景图", "", "图片 (*.png *.jpg *.jpeg *.bmp *.webp)")
         if path:
@@ -511,7 +509,6 @@ class SettingsWindow(FramelessDialog):
                 self._edit.pop(_k, None)
 
     def _save_theme(self):
-        from PySide6.QtWidgets import QInputDialog
         name, ok = QInputDialog.getText(self, tr("保存主题"), tr("主题名称："),
                                         text=self._edit.get("name", tr("自定义主题")))
         if ok and name.strip():
@@ -668,7 +665,6 @@ class SettingsWindow(FramelessDialog):
         core.log.info(f"新建文件夹生成规则: {name}")
 
     def _rename_rule(self):
-        from PySide6.QtWidgets import QInputDialog
         old = self.rule_combo.currentText()
         name, ok = QInputDialog.getText(self, tr("重命名规则"), tr("规则名称："), text=old)
         if not ok or not name.strip() or name.strip() == old:
@@ -795,7 +791,6 @@ class SettingsWindow(FramelessDialog):
         return it.text() if it else None
 
     def _add_custom_folder(self):
-        from PySide6.QtWidgets import QInputDialog
         name, ok = QInputDialog.getText(self, tr("新建子文件夹"), tr("子文件夹名称："))
         if not ok or not name.strip():
             return
@@ -811,7 +806,6 @@ class SettingsWindow(FramelessDialog):
         Toast.show_text(tr("子文件夹已创建"))
 
     def _rename_custom_folder(self):
-        from PySide6.QtWidgets import QInputDialog
         old = self._selected_custom_folder()
         if not old:
             Toast.show_text(tr("请先选择一个子文件夹"))
@@ -1188,7 +1182,6 @@ class SettingsWindow(FramelessDialog):
         if not items:
             Toast.show_text(tr("没有可导出的事项"))
             return
-        from PySide6.QtWidgets import QInputDialog
         fmt, ok = QInputDialog.getItem(self, tr("导出格式"), tr("选择格式："),
                                        ["JSON", "CSV"], 0, False)
         if not ok:
