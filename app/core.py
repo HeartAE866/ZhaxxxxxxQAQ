@@ -35,7 +35,7 @@ ICON_PATH = os.path.join(RES_DIR, "icon.jpg")
 LOGO_PATH = os.path.join(RES_DIR, "logo.png")
 VBS_PATH = os.path.join(ROOT, "ZhaxxxxxxQAQ.vbs")
 APP_NAME = "ZhaxxxxxxQAQ"
-APP_VERSION = "1.1.5"
+APP_VERSION = "1.2.0"
 RUN_REG_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 
 # 托盘图标：优先用户桌面上的 图标.png（按当前用户主目录推导，不硬编码个人路径），
@@ -110,8 +110,8 @@ from theme import DEFAULT_THEME, DEFAULT_THEMES, DEFAULT_THEME_SETTINGS  # noqa:
 from i18n import tr, current_lang  # noqa: E402
 
 DEFAULT_CONFIG = {
-    "language": "zh",
-    "update": {"check": True, "ignored_version": ""},
+    "language": "en",
+    "update": {"check": True, "ignored_version": "", "last_seen_changelog": ""},
     "theme": dict(DEFAULT_THEME),
     "theme_settings": dict(DEFAULT_THEME_SETTINGS),
     "saved_themes": dict(DEFAULT_THEMES),

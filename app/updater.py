@@ -11,17 +11,59 @@ import tempfile
 import threading
 import urllib.request
 
-from PySide6.QtCore import QObject, Signal
-from PySide6.QtWidgets import (QHBoxLayout, QLabel, QProgressBar, QPushButton,
-                               QVBoxLayout)
+from PySide6.QtCore import QObject, Qt, Signal
+from PySide6.QtWidgets import (QCheckBox, QHBoxLayout, QLabel, QProgressBar,
+                               QPushButton)
 
-from i18n import tr
+from i18n import tr, current_lang
 from widgets import FramelessDialog
 
 REPO = "HeartAE866/ZhaxxxxxxQAQ"
 API_URL = f"https://api.github.com/repos/{REPO}/releases/latest"
 USER_AGENT = "ZhaxxxxxxQAQ-Updater/1.0"
 TIMEOUT = 8
+
+# 各版本更新日志（zh / en），新版本发布时在此追加条目；弹窗展示最近三个版本
+CHANGELOGS = {
+    "1.2.0": {
+        "zh": "🎉 进入联网更新新阶段：\n"
+              "· 🔄 新增自动更新：启动时检查 GitHub 新版本，发现更新后一键下载安装\n"
+              "· 📜 新增更新日志：每次更新后展示本次更新内容（可勾选不再显示）\n"
+              "· 🎨 关于页改版：版本号移至「软件更新」区域",
+        "en": "🎉 A new stage with online updates:\n"
+              "· 🔄 Auto-update: checks GitHub Releases on startup; one-click download & install\n"
+              "· 📜 Changelog dialog: shown after each update (can be disabled)\n"
+              "· 🎨 About page revamp: version moved to the Software Update section",
+    },
+    "1.1.4": {
+        "zh": "· 🌐 中英双语界面：设置 → 个性化 可切换简体中文 / English\n"
+              "· ✨ 平行文件夹生成规则：可建「财务」「运营」等多条规则，创建事项时自主选用\n"
+              "· ♻ 恢复出厂设置：双重确认 + 10 秒倒计时，可勾选同时删除项目文件夹\n"
+              "· 🐛 修复：窗口置顶无效；自定义子文件夹支持批量删除\n"
+              "· ⚡ 性能深度优化，安装包精简至约 19MB",
+        "en": "· 🌐 Bilingual UI: Simplified Chinese / English in Settings → Personalization\n"
+              "· ✨ Multiple parallel folder rules (e.g. Finance / Operations), pick per task\n"
+              "· ♻ Factory reset: double confirmation + 10s countdown, optional folder deletion\n"
+              "· 🐛 Fixed: Always-on-Top; batch delete for custom subfolders\n"
+              "· ⚡ Deep performance optimization, ~19 MB installer",
+    },
+    "1.1.3": {
+        "zh": "· 🎨 全面界面美化与体验优化\n"
+              "· 🐛 修复：屏幕吸管取色保存无效、设置界面回车误关、紧凑模式首次启动展开为空\n"
+              "· ⚡ 安装包由 37MB 精简至 19MB",
+        "en": "· 🎨 UI polish & experience improvements\n"
+              "· 🐛 Fixed: eyedropper color not saving, Enter closing Settings, empty panel after first compact launch\n"
+              "· ⚡ Installer slimmed from 37 MB to 19 MB",
+    },
+}
+
+
+def changelog_versions(current: str) -> list:
+    """返回应展示的版本列表（含当前版本在内，最多 3 个，新→旧）。"""
+    cur = version_tuple(current)
+    vers = [v for v in CHANGELOGS if version_tuple(v) <= cur]
+    vers.sort(key=version_tuple, reverse=True)
+    return vers[:3]
 
 
 def version_tuple(v) -> tuple:
@@ -94,6 +136,34 @@ class UpdateDownload(QObject):
             self.done.emit(self.dest)
         except Exception as e:
             self.error.emit(str(e))
+
+
+class ChangelogDialog(FramelessDialog):
+    """更新日志：每次更新后展示最近三个版本的更新内容；「以后不再显示」默认勾选。"""
+
+    def __init__(self, parent, t: dict, version: str):
+        super().__init__(parent, t, tr("更新日志"), width=480)
+        lang = "en" if current_lang() == "en" else "zh"
+        for v in changelog_versions(version):
+            vtitle = QLabel(f"v{v}")
+            vtitle.setStyleSheet("font-size:12pt;font-weight:bold;margin-top:6px;")
+            self.body.addWidget(vtitle)
+            text = (CHANGELOGS.get(v) or {}).get(lang) or ""
+            lbl = QLabel(text, wordWrap=True)
+            lbl.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            self.body.addWidget(lbl)
+
+        self.no_more = QCheckBox(tr("以后不再显示更新日志"))
+        self.no_more.setChecked(True)      # 默认勾选：以后不再打扰
+        self.body.addWidget(self.no_more)
+
+        row = QHBoxLayout()
+        row.addStretch()
+        btn_ok = QPushButton(tr("知道了"), objectName="AccentButton")
+        btn_ok.setDefault(True)
+        btn_ok.clicked.connect(self.accept)
+        row.addWidget(btn_ok)
+        self.body.addLayout(row)
 
 
 class UpdateDialog(FramelessDialog):

@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (QButtonGroup, QCheckBox, QComboBox, QDialog,
 
 import core
 import theme as theme_mod
+import updater
 from i18n import tr
 from widgets import (FramelessDialog, ColorDialog, ConfirmDialog, HotkeyEdit,
                      Toast, combo_text, rounded_pixmap, BgFrame, CountdownDialog)
@@ -1119,7 +1120,9 @@ class SettingsWindow(FramelessDialog):
             except Exception:
                 core.log.error(f"删除项目文件夹失败 {base}:\n"
                                + traceback.format_exc())
+        lang = self.app.config.get("language", default="en")
         self.app.config.data = json.loads(json.dumps(core.DEFAULT_CONFIG))
+        self.app.config.data["language"] = lang   # 保留当前语言，重置后不跳变
         self.app.config.save()
         self.app.store.items = []
         self.app.store.save()
@@ -1334,6 +1337,11 @@ class SettingsWindow(FramelessDialog):
     def _upd_check_changed(self, v):
         self.app.config.set("update", "check", bool(v))
 
+    def _show_changelog(self):
+        d = updater.ChangelogDialog(self, self.t, core.APP_VERSION)
+        self._changelog_dialog = d              # 持有引用防止回收
+        d.show()
+
     # ================================================================ 关于
     def _page_about(self):
         w = QWidget()
@@ -1342,22 +1350,27 @@ class SettingsWindow(FramelessDialog):
         self.nav.addItem(tr("📄 关于"))
         self.pages.addWidget(w)
 
-        title = QLabel(f"{core.APP_NAME}  v{core.APP_VERSION}")
+        title = QLabel(core.APP_NAME)
         title.setStyleSheet("font-size:15pt;font-weight:bold;")
         lay.addWidget(title)
         lay.addWidget(QLabel(tr("轻量桌面工作记事录 · 完全本地离线")))
         lay.addSpacing(6)
         lay.addWidget(QLabel(tr("作者：你的好邻居\n联系邮箱：1559573443@qq.com\nQQ：1559573443")))
-        # 软件更新（自动检查 GitHub Releases）
+        # 软件更新（版本号 + 自动检查 GitHub Releases）
         up_sep = QLabel(tr("软件更新"))
         up_sep.setStyleSheet(f"font-weight:bold;margin-top:10px;color:{self.t['accent']};")
         lay.addWidget(up_sep)
+        lay.addWidget(QLabel(
+            tr("当前版本：{v}").replace("{v}", "v" + core.APP_VERSION)))
         self.upd_check_chk = QCheckBox(tr("启动时检查更新（仅连接 GitHub Releases 公共接口，不收集任何信息）"))
         self.upd_check_chk.setChecked(
             bool(self.app.config.get("update", "check", default=True)))
         self.upd_check_chk.toggled.connect(self._upd_check_changed)
         lay.addWidget(self.upd_check_chk)
         urow = QHBoxLayout()
+        btn_log = QPushButton(tr("查看更新日志"))
+        btn_log.clicked.connect(self._show_changelog)
+        urow.addWidget(btn_log)
         btn_check = QPushButton(tr("检查更新"))
         btn_check.clicked.connect(lambda: self.app.check_updates(manual=True))
         urow.addWidget(btn_check)
@@ -1368,6 +1381,7 @@ class SettingsWindow(FramelessDialog):
         donate = QLabel(tr("打赏作者"))
         donate.setStyleSheet(f"font-weight:bold;color:{self.t['accent']};")
         lay.addWidget(donate)
+        lay.addWidget(QLabel(tr("请作者喝杯咖啡吧~")))
         if os.path.exists(core.DONATION_IMG):
             donate_img = QLabel()
             pm = QPixmap(core.DONATION_IMG).scaledToWidth(128, Qt.SmoothTransformation)

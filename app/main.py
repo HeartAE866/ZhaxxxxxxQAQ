@@ -12,8 +12,8 @@ from datetime import timedelta
 
 from PySide6.QtCore import QEasingCurve, QLockFile, QObject, QPropertyAnimation, Qt, QTimer, Signal
 from PySide6.QtGui import QCursor, QGuiApplication, QIcon, QPixmap
-from PySide6.QtWidgets import (QApplication, QFrame, QLabel, QSystemTrayIcon,
-                               QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QApplication, QDialog, QFrame, QLabel,
+                               QSystemTrayIcon, QVBoxLayout, QWidget)
 
 import core
 import i18n
@@ -155,6 +155,22 @@ class App(QObject):
 
         # 自动更新检查（启动 4 秒后静默进行）
         QTimer.singleShot(4000, self.check_updates)
+        # 更新日志（本次更新内容，仅展示一次，可勾选不再显示）
+        QTimer.singleShot(5000, self._maybe_show_changelog)
+
+    # ---------------------------------------------------------------- 更新日志
+    def _maybe_show_changelog(self):
+        if self.config.get("update", "last_seen_changelog",
+                           default="") == core.APP_VERSION:
+            return
+        d = updater.ChangelogDialog(self.win, self.t, core.APP_VERSION)
+        self._changelog_dialog = d              # 持有引用防止回收
+        d.finished.connect(lambda _: self._changelog_finished(d))
+        d.show()
+
+    def _changelog_finished(self, d):
+        if d.result() == QDialog.Accepted and d.no_more.isChecked():
+            self.config.set("update", "last_seen_changelog", core.APP_VERSION)
 
     # ---------------------------------------------------------------- 更新
     def check_updates(self, manual: bool = False):

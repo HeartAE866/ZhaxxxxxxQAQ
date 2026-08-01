@@ -6,12 +6,14 @@ A frameless, frosted-glass floating widget on your desktop: auto-created project
 **完全本地离线运行，不联网、不收集任何信息 · 100% local and offline — no accounts, no cloud, no tracking.**
 （可选：启动时可检查 GitHub 更新，仅访问官方公开接口 · Optional: startup update check, connects only to the public GitHub API）
 
-![Version](https://img.shields.io/badge/version-v1.1.5-blue)
+![Version](https://img.shields.io/badge/version-v1.2.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Python](https://img.shields.io/badge/Python-3.14+-8A2BE2)
 ![PySide6](https://img.shields.io/badge/UI-PySide6-4fc3f7)
 
-![Main Window](docs/screenshots/main.png)
+![English UI](docs/screenshots/main_en.png)
+
+![中文界面](docs/screenshots/main_zh.png)
 
 ---
 
@@ -28,7 +30,7 @@ A frameless, frosted-glass floating widget on your desktop: auto-created project
 - Manual binding, custom subfolders, rebinding and unbinding are all supported
 - Everything stays organized by Year → Month → Project automatically
 
-![Auto-created folders](docs/screenshots/folder.png)
+![Auto-created folders](docs/screenshots/folder_en.png)
 
 ### Features
 
@@ -47,10 +49,12 @@ A frameless, frosted-glass floating widget on your desktop: auto-created project
 - **🔄 Auto-update**: checks GitHub Releases on startup; one-click download & install when a new version is found (Settings → About to toggle / check manually)
 - **Lightweight**: ~0% CPU when idle, ~19 MB installer
 
+![Settings](docs/screenshots/settings_en.png)
+
 ### Install
 
 Download the latest installer from [Releases](https://github.com/HeartAE866/ZhaxxxxxxQAQ/releases)
-(`ZhaxxxxxxQAQ_Setup_v1.1.5.exe`) and run it.
+(`ZhaxxxxxxQAQ_Setup_v1.2.0.exe`) and run it.
 
 > Windows 10/11 (64-bit). Fully offline — uninstall by deleting the app folder.
 
@@ -69,6 +73,8 @@ Download the latest installer from [Releases](https://github.com/HeartAE866/Zhax
 - 也可手动绑定任意文件夹 / 绑定自定义子文件夹，随时改绑、解绑
 - 归档从此有条理：所有资料自动按 年 → 月 → 项目 归档，找东西再也不靠回忆
 
+![自动创建的文件夹结构](docs/screenshots/folder_zh.png)
+
 ### 功能特性
 
 - **无边框磨砂悬浮窗**：贴在桌面层、不进任务栏，仅系统托盘驻留；支持拖拽、八向边缘缩放、位置记忆
@@ -86,10 +92,12 @@ Download the latest installer from [Releases](https://github.com/HeartAE866/Zhax
 - **🔄 自动更新**：启动时检查 GitHub Releases，发现新版本一键下载安装（设置 → 关于 可关闭/手动检查）
 - **轻量**：待机 CPU 占用接近 0，安装包约 19MB
 
+![设置界面](docs/screenshots/settings_zh.png)
+
 ### 安装
 
 在 [Releases](https://github.com/HeartAE866/ZhaxxxxxxQAQ/releases) 下载最新版安装包
-（`ZhaxxxxxxQAQ_Setup_v1.1.5.exe`），双击安装即可。
+（`ZhaxxxxxxQAQ_Setup_v1.2.0.exe`），双击安装即可。
 
 > Windows 10/11（64 位）。完全本地离线，卸载只需删除安装目录。
 

@@ -273,6 +273,7 @@ _TRANSLATIONS = {
     "作者：你的好邻居\n联系邮箱：1559573443@qq.com\nQQ：1559573443":
         "Author: Your Neighbor\nEmail: 1559573443@qq.com\nQQ: 1559573443",
     "打赏作者": "Support the Author",
+    "请作者喝杯咖啡吧~": "Buy the author a coffee~",
     "微信/支付宝扫码打赏，感谢支持！": "Scan to tip via WeChat/Alipay. Thank you!",
     "所有数据保存在程序目录内，卸载只需删除本地文件夹。":
         "All data is stored locally; just delete the folder to uninstall.",
@@ -429,4 +430,10 @@ _TRANSLATIONS = {
     "启动时检查更新（仅连接 GitHub Releases 公共接口，不收集任何信息）":
         "Check for updates on startup (connects only to the public GitHub Releases API, no data collected)",
     "检查更新": "Check for Updates",
+    "查看更新日志": "View Changelog",
+    "当前版本：{v}": "Current version: {v}",
+    "更新日志": "Changelog",
+    "以后不再显示更新日志": "Don't show the changelog again",
+    "知道了": "Got it",
+    "本版本更新内容见 GitHub Releases。": "See the GitHub Releases page for what's new in this version.",
 }

@@ -3,14 +3,14 @@
 A frameless, frosted-glass floating widget that sits on your desktop: work logs, todos, recurring tasks, reminders, and an off-work countdown.
 **100% local and offline** — all data stays in the app folder. No accounts, no cloud, no tracking.
 
-![Version](https://img.shields.io/badge/version-v1.1.5-blue)
+![Version](https://img.shields.io/badge/version-v1.2.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Python](https://img.shields.io/badge/Python-3.14+-8A2BE2)
 ![PySide6](https://img.shields.io/badge/UI-PySide6-4fc3f7)
 
 > 🌐 中文介绍请看 [README.md](README.md)
 
-![Main Window](docs/screenshots/main.png)
+![Main Window](docs/screenshots/main_en.png)
 
 ## ✨ Killer Feature: Auto-Created Project Folders, One-Click Access
 
@@ -23,7 +23,7 @@ A frameless, frosted-glass floating widget that sits on your desktop: work logs,
 - Manual binding, custom subfolders, rebinding and unbinding are all supported
 - Everything stays organized by Year → Month → Project automatically
 
-![Auto-created folders](docs/screenshots/folder.png)
+![Auto-created folders](docs/screenshots/folder_en.png)
 
 ## Features
 
@@ -42,10 +42,12 @@ A frameless, frosted-glass floating widget that sits on your desktop: work logs,
 - **🌐 Bilingual**: Simplified Chinese / English UI, switchable in Settings → Personalization
 - **Lightweight**: ~0% CPU when idle, ~19 MB installer
 
+![Settings](docs/screenshots/settings_en.png)
+
 ## Install
 
 Download the latest installer from [Releases](https://github.com/HeartAE866/ZhaxxxxxxQAQ/releases)
-(`ZhaxxxxxxQAQ_Setup_v1.1.5.exe`) and run it.
+(`ZhaxxxxxxQAQ_Setup_v1.2.0.exe`) and run it.
 
 > Windows 10/11 (64-bit). Fully offline — uninstall by deleting the app folder.
 
