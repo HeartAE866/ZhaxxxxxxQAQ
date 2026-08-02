@@ -431,6 +431,10 @@ _TRANSLATIONS = {
         "Check for updates on startup (connects only to the public GitHub Releases API, no data collected)",
     "检查更新": "Check for Updates",
     "查看更新日志": "View Changelog",
+    "当前更新源：GitHub": "Update source: GitHub",
+    "当前更新源：国内镜像": "Update source: China Mirror",
+    "国内镜像：GitHub 无法访问时自动切换，无需科学上网即可更新":
+        "China mirror: auto-switches when GitHub is unreachable — update without a VPN",
     "当前版本：{v}": "Current version: {v}",
     "更新日志": "Changelog",
     "以后不再显示更新日志": "Don't show the changelog again",

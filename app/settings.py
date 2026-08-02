@@ -1362,6 +1362,14 @@ class SettingsWindow(FramelessDialog):
         lay.addWidget(up_sep)
         lay.addWidget(QLabel(
             tr("当前版本：{v}").replace("{v}", "v" + core.APP_VERSION)))
+        # 更新源标识（GitHub 不可达时自动切换国内镜像）
+        src = self.app.config.get("update", "last_source", default="")
+        src_txt = tr("当前更新源：国内镜像") if src == "mirror" \
+            else tr("当前更新源：GitHub")
+        self.upd_source_lbl = QLabel(src_txt)
+        self.upd_source_lbl.setStyleSheet(
+            f"color:{theme_mod.rgba(self.t['text'], 170)};")
+        lay.addWidget(self.upd_source_lbl)
         self.upd_check_chk = QCheckBox(tr("启动时检查更新（仅连接 GitHub Releases 公共接口，不收集任何信息）"))
         self.upd_check_chk.setChecked(
             bool(self.app.config.get("update", "check", default=True)))
@@ -1376,6 +1384,10 @@ class SettingsWindow(FramelessDialog):
         urow.addWidget(btn_check)
         urow.addStretch()
         lay.addLayout(urow)
+        unote = QLabel(tr("国内镜像：GitHub 无法访问时自动切换，无需科学上网即可更新"))
+        unote.setWordWrap(True)
+        unote.setStyleSheet(f"color:{theme_mod.rgba(self.t['text'], 140)};font-size:8pt;")
+        lay.addWidget(unote)
         # 打赏作者（下移三行，与上方信息隔开）
         lay.addSpacing(45)
         donate = QLabel(tr("打赏作者"))

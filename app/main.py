@@ -189,7 +189,8 @@ class App(QObject):
             if self._update_check_manual:
                 Toast.show_text(tr("已是最新版本"))
             return
-        tag, url, name, body = res
+        tag, url, name, body, source = res
+        self.config.set("update", "last_source", source)
         if updater.version_tuple(tag) <= updater.version_tuple(core.APP_VERSION):
             if self._update_check_manual:
                 Toast.show_text(tr("已是最新版本"))
@@ -197,7 +198,7 @@ class App(QObject):
         if tag == self.config.get("update", "ignored_version", default=""):
             return
         self._update_nagged = True
-        log.info(f"发现新版本: {tag}")
+        log.info(f"发现新版本: {tag}（来源: {source}）")
         d = updater.UpdateDialog(self.win, self.t, tag, url, name, body)
         d.ignored.connect(
             lambda: self.config.set("update", "ignored_version", tag))

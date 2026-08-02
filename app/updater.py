@@ -20,11 +20,23 @@ from widgets import FramelessDialog
 
 REPO = "HeartAE866/ZhaxxxxxxQAQ"
 API_URL = f"https://api.github.com/repos/{REPO}/releases/latest"
+# 国内镜像：jsDelivr 托管仓库内的 update.json（国内可访问），安装包经 ghfast 加速代理
+MIRROR_JSON = "https://fastly.jsdelivr.net/gh/HeartAE866/ZhaxxxxxxQAQ@main/update.json"
 USER_AGENT = "ZhaxxxxxxQAQ-Updater/1.0"
 TIMEOUT = 8
 
 # 各版本更新日志（zh / en），新版本发布时在此追加条目；弹窗展示最近三个版本
 CHANGELOGS = {
+    "1.2.1": {
+        "zh": "🌐 新增国内镜像源：\n"
+              "· 🇨🇳 国内用户无需科学上网即可检查更新与下载安装包\n"
+              "· 🔄 GitHub 不可达时自动切换国内镜像（jsDelivr + ghfast 加速）\n"
+              "· 🏷 设置 → 关于 会显示当前更新源（GitHub / 国内镜像）",
+        "en": "🌐 China mirror source added:\n"
+              "· 🇨🇳 Chinese users can check updates & download without a VPN\n"
+              "· 🔄 Auto-switches to the China mirror (jsDelivr + ghfast proxy) when GitHub is unreachable\n"
+              "· 🏷 Settings → About shows the current update source (GitHub / China Mirror)",
+    },
     "1.2.0": {
         "zh": "🎉 进入联网更新新阶段：\n"
               "· 🔄 新增自动更新：启动时检查 GitHub 新版本，发现更新后一键下载安装\n"
@@ -78,7 +90,8 @@ def _fetch_json(url: str, timeout: int = TIMEOUT):
 
 
 def check_latest():
-    """返回 (tag, 安装包下载地址, 安装包名, 更新说明) 或 None（无网络/无资产）。"""
+    """返回 (tag, 安装包下载地址, 安装包名, 更新说明, 来源) 或 None。
+    来源: "github"=GitHub 官方接口 / "mirror"=国内镜像（GitHub 不可达时自动切换）。"""
     try:
         data = _fetch_json(API_URL)
         tag = data.get("tag_name") or ""
@@ -87,7 +100,19 @@ def check_latest():
             name = a.get("name") or ""
             url = a.get("browser_download_url") or ""
             if name.lower().endswith(".exe") and url:
-                return tag, url, name, body[:300]
+                return tag, url, name, body[:300], "github"
+        return None
+    except Exception:
+        pass
+    # 国内镜像：GitHub 不可达时读取 jsDelivr 上的 update.json
+    try:
+        data = _fetch_json(MIRROR_JSON)
+        tag = data.get("tag") or ""
+        name = data.get("name") or ""
+        url = data.get("mirror_url") or data.get("url") or ""
+        body = (data.get("body") or "").strip()
+        if tag and url and name:
+            return tag, url, name, body[:300], "mirror"
         return None
     except Exception:
         return None
