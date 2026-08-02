@@ -9,7 +9,7 @@ import traceback
 from datetime import datetime
 
 from PySide6.QtCore import QTime, QTimer, Qt, Signal
-from PySide6.QtGui import QColor, QFontDatabase, QPixmap
+from PySide6.QtGui import QColor, QFontDatabase, QGuiApplication, QPixmap
 from PySide6.QtWidgets import (QButtonGroup, QCheckBox, QComboBox, QDialog,
                                QFileDialog, QFrame, QGridLayout, QHBoxLayout, QLabel,
                                QInputDialog,
@@ -61,6 +61,9 @@ class SettingsWindow(FramelessDialog):
         self._edit = self.t
         self.setStyleSheet(theme_mod.build_qss(self.t))
         self.setMinimumHeight(480)
+        # 高度不超过屏幕，防止小屏/高缩放下窗口超出屏幕导致内容显示不全
+        scr = QGuiApplication.primaryScreen().availableGeometry()
+        self.setMaximumHeight(max(480, scr.height() - 40))
         self._theme_timer = QTimer(self, singleShot=True, interval=120,
                                    timeout=self._apply_theme)
         self._diy_save_timer = QTimer(self, singleShot=True, interval=200,
@@ -106,18 +109,23 @@ class SettingsWindow(FramelessDialog):
             else:
                 self.panel.set_bg("", "", 100)
 
+    def _wrap_scroll(self, w: QWidget) -> QScrollArea:
+        """把页面包进滚动区：内容超高时滚动查看，避免窗口超出屏幕导致显示不全。"""
+        sc = QScrollArea()
+        sc.setWidgetResizable(True)
+        sc.setWidget(w)
+        sc.setFrameShape(QFrame.NoFrame)
+        sc.viewport().setAutoFillBackground(False)
+        sc.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        return sc
+
     # ================================================================ 个性化
     def _page_personal(self):
         w = QWidget()
         lay = QVBoxLayout(w)
         lay.setAlignment(Qt.AlignTop)
         # 内容较多，放入滚动区，支持滑条/滚轮向下查看；横向可滚动避免文字超出
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setWidget(w)
-        scroll.setFrameShape(QFrame.NoFrame)
-        scroll.viewport().setAutoFillBackground(False)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll = self._wrap_scroll(w)
         self.nav.addItem(tr("🎨 个性化"))
         self.pages.addWidget(scroll)
 
@@ -555,7 +563,8 @@ class SettingsWindow(FramelessDialog):
         lay = QVBoxLayout(w)
         lay.setAlignment(Qt.AlignTop)
         self.nav.addItem(tr("📁 文件夹"))
-        self.pages.addWidget(w)
+        scroll = self._wrap_scroll(w)
+        self.pages.addWidget(scroll)
 
         lay.addWidget(QLabel(tr("父目录（所有自动生成的文件夹都在这里）")))
         row = QHBoxLayout()
@@ -888,7 +897,8 @@ class SettingsWindow(FramelessDialog):
         lay = QVBoxLayout(w)
         lay.setAlignment(Qt.AlignTop)
         self.nav.addItem(tr("⏰ 提醒"))
-        self.pages.addWidget(w)
+        scroll = self._wrap_scroll(w)
+        self.pages.addWidget(scroll)
 
         r = self.app.config.get("reminder", default={})
         self.todo_enabled = QCheckBox(tr("启用待办事项截止提醒"))
@@ -986,7 +996,8 @@ class SettingsWindow(FramelessDialog):
         lay = QVBoxLayout(w)
         lay.setAlignment(Qt.AlignTop)
         self.nav.addItem(tr("⌨ 快捷键"))
-        self.pages.addWidget(w)
+        scroll = self._wrap_scroll(w)
+        self.pages.addWidget(scroll)
 
         lay.addWidget(QLabel(tr("点击输入框后按下组合键（支持四键组合），全部松开即保存")))
         hk = self.app.config.get("hotkeys", default={})
@@ -1032,7 +1043,8 @@ class SettingsWindow(FramelessDialog):
         w = QWidget()
         lay = QVBoxLayout(w)
         self.nav.addItem(tr("🗄 数据管理"))
-        self.pages.addWidget(w)
+        scroll = self._wrap_scroll(w)
+        self.pages.addWidget(scroll)
 
         # 搜索 + 筛选
         row = QHBoxLayout()
@@ -1285,7 +1297,8 @@ class SettingsWindow(FramelessDialog):
         w = QWidget()
         lay = QVBoxLayout(w)
         self.nav.addItem(tr("📜 日志"))
-        self.pages.addWidget(w)
+        scroll = self._wrap_scroll(w)
+        self.pages.addWidget(scroll)
 
         row = QHBoxLayout()
         self.log_combo = QComboBox()
@@ -1348,7 +1361,8 @@ class SettingsWindow(FramelessDialog):
         lay = QVBoxLayout(w)
         lay.setAlignment(Qt.AlignTop)
         self.nav.addItem(tr("📄 关于"))
-        self.pages.addWidget(w)
+        scroll = self._wrap_scroll(w)
+        self.pages.addWidget(scroll)
 
         title = QLabel(core.APP_NAME)
         title.setStyleSheet("font-size:15pt;font-weight:bold;")
