@@ -29,14 +29,22 @@ TIMEOUT = 8
 # 各版本更新日志（zh / en），新版本发布时在此追加条目；弹窗展示最近三个版本
 CHANGELOGS = {
     "1.2.1": {
-        "zh": "🌐 新增国内镜像源：\n"
-              "· 🇨🇳 国内用户无需科学上网即可检查更新与下载安装包\n"
-              "· 🔄 GitHub 不可达时自动切换国内镜像（jsDelivr + ghfast 加速）\n"
-              "· 🏷 设置 → 关于 会显示当前更新源（GitHub / 国内镜像）",
-        "en": "🌐 China mirror source added:\n"
-              "· 🇨🇳 Chinese users can check updates & download without a VPN\n"
-              "· 🔄 Auto-switches to the China mirror (jsDelivr + ghfast proxy) when GitHub is unreachable\n"
-              "· 🏷 Settings → About shows the current update source (GitHub / China Mirror)",
+        "zh": "🇨🇳 国内镜像与多项修复：\n"
+              "· 🔄 新增国内镜像源：GitHub 无法访问时自动切换（jsDelivr + ghfast 加速），无需科学上网即可更新\n"
+              "· 🌐 安装时可选语言（简体中文 / English），安装器直接写入应用\n"
+              "· 🧹 卸载彻底：自动关闭运行中的软件，清理全部数据与开机自启项\n"
+              "· 🐛 修复：高 DPI 缩放（125%/150%）下所有窗口显示不全\n"
+              "· 🐛 修复：启动更新日志弹窗遮挡主窗口、拦截点击\n"
+              "· 🐛 修复：设置窗口内容超出屏幕被截断（7 页全部支持滚动）\n"
+              "· 🐛 修复：新建项目的文件夹按创建时间归档（不再用截止时间）",
+        "en": "🇨🇳 China mirror & multiple fixes:\n"
+              "· 🔄 China mirror source: auto-switches when GitHub is unreachable (jsDelivr + ghfast), update without a VPN\n"
+              "· 🌐 Language selection during install (Simplified Chinese / English)\n"
+              "· 🧹 Complete uninstall: auto-closes the running app, removes all data & auto-start entry\n"
+              "· 🐛 Fixed: windows clipped on high-DPI scaling (125%/150%)\n"
+              "· 🐛 Fixed: startup changelog dialog covering/blocking the main window\n"
+              "· 🐛 Fixed: Settings window content cut off on small screens (all 7 pages scrollable)\n"
+              "· 🐛 Fixed: new project folders archived by creation time (not deadline)",
     },
     "1.2.0": {
         "zh": "🎉 进入联网更新新阶段：\n"

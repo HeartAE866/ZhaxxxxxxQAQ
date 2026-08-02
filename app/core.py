@@ -465,11 +465,7 @@ def unique_path(path: str) -> str:
 
 
 def item_date(item: dict):
-    """事项所属日期：工作记录用创建日；待办用截止日（无则用创建日）。"""
-    if item["type"] == "todo":
-        d = parse_dt(item.get("deadline"))
-        if d:
-            return d.date()
+    """事项所属日期：一律按创建时间归档（创建文件夹时用）。"""
     return (parse_dt(item.get("created")) or now()).date()
 
 

@@ -108,19 +108,24 @@ def apply_frosted(win: QWidget, t: dict):
 
 
 def apply_rounded_region(win: QWidget, radius: int):
-    """把窗口裁剪为圆角矩形，使磨砂边缘也呈圆角。"""
+    """把窗口裁剪为圆角矩形，使磨砂边缘也呈圆角。
+    注意：SetWindowRgn 使用物理像素，必须乘以 devicePixelRatio，
+    否则在 125%/150% 缩放的电脑上区域比窗口小，导致窗口显示不全。"""
     try:
         gdi32 = ctypes.windll.gdi32
         user32 = ctypes.windll.user32
-        w, h = win.width(), win.height()
+        dpr = win.devicePixelRatioF() or 1.0
+        w = int(win.width() * dpr)
+        h = int(win.height() * dpr)
+        r = max(1, int(radius * dpr))
         if w <= 0 or h <= 0:
             return
         gdi32.CreateRoundRectRgn.restype = ctypes.c_void_p
         gdi32.CreateRoundRectRgn.argtypes = [ctypes.c_int] * 4 + [ctypes.c_int, ctypes.c_int]
         user32.SetWindowRgn.argtypes = [wintypes.HWND, ctypes.c_void_p, ctypes.c_bool]
-        r = gdi32.CreateRoundRectRgn(0, 0, w + 1, h + 1, radius * 2, radius * 2)
-        if r:
-            user32.SetWindowRgn(wintypes.HWND(int(win.winId())), r, True)
+        rgn = gdi32.CreateRoundRectRgn(0, 0, w + 1, h + 1, r * 2, r * 2)
+        if rgn:
+            user32.SetWindowRgn(wintypes.HWND(int(win.winId())), rgn, True)
     except Exception:
         pass
 
