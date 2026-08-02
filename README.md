@@ -6,7 +6,7 @@ A frameless, frosted-glass floating widget on your desktop: auto-created project
 **完全本地离线运行，不联网、不收集任何信息 · 100% local and offline — no accounts, no cloud, no tracking.**
 （可选：启动时可检查 GitHub 更新，仅访问官方公开接口 · Optional: startup update check, connects only to the public GitHub API）
 
-![Version](https://img.shields.io/badge/version-v1.2.0-blue)
+![Version](https://img.shields.io/badge/version-v1.2.1-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Python](https://img.shields.io/badge/Python-3.14+-8A2BE2)
 ![PySide6](https://img.shields.io/badge/UI-PySide6-4fc3f7)
