@@ -160,8 +160,12 @@ class App(QObject):
 
     # ---------------------------------------------------------------- 更新日志
     def _maybe_show_changelog(self):
-        if self.config.get("update", "last_seen_changelog",
-                           default="") == core.APP_VERSION:
+        last = self.config.get("update", "last_seen_changelog", default="")
+        if last == core.APP_VERSION:
+            return
+        if not last:
+            # 全新安装：不自动弹更新日志（可在 设置→关于→查看更新日志 中浏览）
+            self.config.set("update", "last_seen_changelog", core.APP_VERSION)
             return
         d = updater.ChangelogDialog(self.win, self.t, core.APP_VERSION)
         self._changelog_dialog = d              # 持有引用防止回收
