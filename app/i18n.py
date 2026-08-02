@@ -111,6 +111,9 @@ _TRANSLATIONS = {
     "待办将于 {mins} 分钟后截止（{deadline}）": "Todo due in {mins} min ({deadline})",
     "删除提醒": "Delete Reminder",
     "删除提醒「{title}」？": "Delete reminder 「{title}」?",
+    "删除事项「{title}」？": "Delete item 「{title}」?",
+    "已绑定工作文件夹，可勾选同时删除：\n{path}":
+        "Bound work folder — check to delete it too:\n{path}",
     "稍后提醒({mins}分钟)": "Snoozed ({mins} min)",
     "已添加：{title}": "Added: {title}",
     "已完成当期：{title}": "Completed: {title}",

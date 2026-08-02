@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import ctypes
 import os
+import shutil
 import subprocess
 import sys
 import traceback
@@ -381,9 +382,36 @@ class App(QObject):
             m.addAction(tr("✔ 完成当期")).triggered.connect(
                 lambda: self._complete_instance(item))
         m.addSeparator()
+        m.addAction(tr("🗑 删除")).triggered.connect(
+            lambda: self.delete_item(item))
         m.addAction(tr("📂 打开工作目录")).triggered.connect(
             lambda: self.open_folder_flow(item))
         m.exec(gpos)
+
+    def delete_item(self, item: dict):
+        """右键删除事项；绑定文件夹的可勾选同时删除对应文件夹。"""
+        folder = item.get("folder")
+        has_folder = bool(folder and os.path.isdir(folder))
+        msg = tr("删除事项「{title}」？").replace("{title}", item["title"])
+        checkbox = None
+        if has_folder:
+            msg += "\n\n" + tr("已绑定工作文件夹，可勾选同时删除：\n{path}") \
+                .replace("{path}", folder)
+            checkbox = tr("同时删除绑定的工作文件夹（不可恢复！）")
+        ok, del_folder = ConfirmDialog.ask(
+            self.win, self.t, tr("确认删除"), msg,
+            checkbox=checkbox, ok_text=tr("删除"))
+        if not ok:
+            return
+        if del_folder and folder:
+            try:
+                shutil.rmtree(folder)
+                log.info(f"删除文件夹: {folder}")
+            except Exception:
+                log.error(f"删除文件夹失败 {folder}:\n" + traceback.format_exc())
+        self.store.delete([item["id"]])
+        self.win.refresh()
+        Toast.show_text(tr("已删除 {n} 条").replace("{n}", "1"))
 
     def _toggle_todo(self, item):
         item["done"] = not item.get("done", False)
