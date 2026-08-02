@@ -8,14 +8,14 @@ import shutil
 import traceback
 from datetime import datetime
 
-from PySide6.QtCore import QTime, QTimer, Qt, Signal
+from PySide6.QtCore import QTimer, Qt, Signal
 from PySide6.QtGui import QColor, QFontDatabase, QGuiApplication, QPixmap
 from PySide6.QtWidgets import (QButtonGroup, QCheckBox, QComboBox, QDialog,
                                QFileDialog, QFrame, QGridLayout, QHBoxLayout, QLabel,
                                QInputDialog,
                                QLineEdit, QListWidget, QListWidgetItem,
                                QPushButton, QScrollArea, QSizePolicy, QSlider,
-                               QStackedWidget, QTextEdit, QTimeEdit,
+                               QStackedWidget, QTextEdit, 
                                QTreeWidget, QTreeWidgetItem, QVBoxLayout,
                                QWidget)
 
@@ -936,9 +936,20 @@ class SettingsWindow(FramelessDialog):
 
         owrow = QHBoxLayout()
         owrow.addWidget(QLabel(tr("下班时间")))
-        self.off_time = QTimeEdit(QTime.fromString(str(ow.get("time", "18:00")), "HH:mm"))
-        self.off_time.setDisplayFormat("HH:mm")
-        owrow.addWidget(self.off_time, 1)
+        try:
+            _hh, _mm = str(ow.get("time", "18:00")).split(":")
+            _hh, _mm = int(_hh), int(_mm)
+        except Exception:
+            _hh, _mm = 18, 0
+        self.off_hour = QComboBox()
+        self.off_hour.addItems([f"{i:02d}" for i in range(24)])
+        self.off_hour.setCurrentIndex(_hh)
+        self.off_min = QComboBox()
+        self.off_min.addItems([f"{i:02d}" for i in range(60)])
+        self.off_min.setCurrentIndex(_mm)
+        owrow.addWidget(self.off_hour)
+        owrow.addWidget(self.off_min)
+        owrow.addStretch()
         lay.addLayout(owrow)
 
         offrow = QHBoxLayout()
@@ -982,7 +993,7 @@ class SettingsWindow(FramelessDialog):
             "remind_enabled": self.remind_enabled.isChecked()})
         self.app.config.set("offwork", {
             "enabled": self.off_enabled.isChecked(),
-            "time": self.off_time.time().toString("HH:mm"),
+            "time": f"{self.off_hour.currentText()}:{self.off_min.currentText()}",
             "format": self.off_format.currentData(),
             "weekdays_only": self.off_weekdays.isChecked(),
             "template": self.off_template.text().strip() or "距下班 {n}"})

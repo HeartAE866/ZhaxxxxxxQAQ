@@ -5,11 +5,10 @@ from __future__ import annotations
 import os
 from datetime import datetime, timedelta
 
-from PySide6.QtCore import QDateTime, Qt, QTime, Signal
+from PySide6.QtCore import QDateTime, Qt, Signal
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDateTimeEdit,
                                QFileDialog, QHBoxLayout, QLabel, QLineEdit,
-                               QListWidget, QPushButton, QSpinBox, QTimeEdit,
-                               QWidget)
+                               QListWidget, QPushButton, QWidget)
 import core
 from i18n import tr
 from widgets import FramelessDialog
@@ -122,9 +121,27 @@ class ItemEditDialog(FramelessDialog):
                 list(core.PERIODS).index(r.get("period", "day")))
             self.body.addLayout(_form_row("循环周期", self.period))
 
-            self.time_edit = QTimeEdit(QTime.fromString(r.get("time", "09:00"), "HH:mm"))
-            self.time_edit.setDisplayFormat("HH:mm")
-            self.body.addLayout(_form_row("提醒时间", self.time_edit))
+            self.time_row = QWidget()
+            tl = QHBoxLayout(self.time_row)
+            tl.setContentsMargins(0, 0, 0, 0)
+            try:
+                _th, _tm = str(r.get("time", "09:00")).split(":")
+                _th, _tm = int(_th), int(_tm)
+            except Exception:
+                _th, _tm = 9, 0
+            self.recur_hour = QComboBox()
+            self.recur_hour.addItems([f"{i:02d}" for i in range(24)])
+            self.recur_hour.setCurrentIndex(_th)
+            self.recur_min = QComboBox()
+            self.recur_min.addItems([f"{i:02d}" for i in range(60)])
+            self.recur_min.setCurrentIndex(_tm)
+            lbl_time = QLabel(tr("提醒时间"))
+            lbl_time.setFixedWidth(64)
+            tl.addWidget(lbl_time)
+            tl.addWidget(self.recur_hour)
+            tl.addWidget(self.recur_min)
+            tl.addStretch()
+            self.body.addWidget(self.time_row)
 
             # 每周 → 星期
             self.week_row = QWidget()
@@ -148,9 +165,11 @@ class ItemEditDialog(FramelessDialog):
             self.day_row = QWidget()
             dl = QHBoxLayout(self.day_row)
             dl.setContentsMargins(0, 0, 0, 0)
-            self.monthday = QSpinBox(minimum=1, maximum=31,
-                                     value=r.get("monthday", datetime.now().day))
-            lbl2 = QLabel("日期(日)")
+            self.monthday = QComboBox()
+            self.monthday.addItems([str(i) for i in range(1, 32)])
+            self.monthday.setCurrentIndex(
+                max(0, int(r.get("monthday", datetime.now().day)) - 1))
+            lbl2 = QLabel(tr("日期(日)"))
             lbl2.setFixedWidth(64)
             dl.addWidget(lbl2)
             dl.addWidget(self.monthday, 1)
@@ -160,9 +179,11 @@ class ItemEditDialog(FramelessDialog):
             self.ym_row = QWidget()
             yl = QHBoxLayout(self.ym_row)
             yl.setContentsMargins(0, 0, 0, 0)
-            self.month = QSpinBox(minimum=1, maximum=12,
-                                  value=r.get("month", datetime.now().month))
-            lbl3 = QLabel("月份(月)")
+            self.month = QComboBox()
+            self.month.addItems([str(i) for i in range(1, 13)])
+            self.month.setCurrentIndex(
+                max(0, int(r.get("month", datetime.now().month)) - 1))
+            lbl3 = QLabel(tr("月份(月)"))
             lbl3.setFixedWidth(64)
             yl.addWidget(lbl3)
             yl.addWidget(self.month, 1)
@@ -291,14 +312,14 @@ class ItemEditDialog(FramelessDialog):
             it["notified"] = False
         if self.item_type == "recur":
             p = self.period.currentData()
-            r = {"period": p, "time": self.time_edit.time().toString("HH:mm")}
+            r = {"period": p, "time": f"{self.recur_hour.currentText()}:{self.recur_min.currentText()}"}
             if p == "week":
                 r["weekday"] = self.weekday.currentData()
             if p in ("month", "quarter"):
-                r["monthday"] = self.monthday.value()
+                r["monthday"] = int(self.monthday.currentText())
             if p == "year":
-                r["month"] = self.month.value()
-                r["monthday"] = self.monthday.value()
+                r["month"] = int(self.month.currentText())
+                r["monthday"] = int(self.monthday.currentText())
             it["recur"] = r
         p = self.priority.currentData()
         it["priority"] = core.auto_priority(it) if p == "auto" else p
@@ -558,12 +579,14 @@ class ReminderDialog(FramelessDialog):
         self.body.addLayout(row)
 
         row2 = QHBoxLayout()
-        self.custom_spin = QSpinBox(minimum=1, maximum=1440, value=15,
-                                    suffix=tr(" 分钟后"))
+        self.custom_combo = QComboBox()
+        for m in (5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240):
+            self.custom_combo.addItem(f"{m}{tr(' 分钟后')}", m)
+        self.custom_combo.setCurrentIndex(2)     # 默认 15 分钟
         btn_custom = QPushButton(tr("自定义稍后"))
         btn_custom.clicked.connect(
-            lambda: self._emit("snooze", self.custom_spin.value()))
-        row2.addWidget(self.custom_spin, 1)
+            lambda: self._emit("snooze", self.custom_combo.currentData()))
+        row2.addWidget(self.custom_combo, 1)
         row2.addWidget(btn_custom)
         self.body.addLayout(row2)
 

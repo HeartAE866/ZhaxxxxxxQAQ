@@ -148,6 +148,21 @@ QLineEdit:focus, QTextEdit:focus, QComboBox:focus, QDateTimeEdit:focus,
 QSpinBox:focus, QTimeEdit:focus {{
     border: 1px solid {rgba(accent, 200)};
 }}
+/* 数字/时间控件的上下箭头（确保可点击、可见） */
+QAbstractSpinBox {{ padding-right: 18px; }}
+QAbstractSpinBox::up-button, QAbstractSpinBox::down-button {{
+    background: transparent; border: none; width: 16px;
+}}
+QAbstractSpinBox::up-arrow {{
+    image: none; width: 0; height: 0;
+    border-left: 4px solid transparent; border-right: 4px solid transparent;
+    border-bottom: 5px solid {text};
+}}
+QAbstractSpinBox::down-arrow {{
+    image: none; width: 0; height: 0;
+    border-left: 4px solid transparent; border-right: 4px solid transparent;
+    border-top: 5px solid {text};
+}}
 QComboBox::drop-down {{ border: none; width: 22px; }}
 QComboBox::down-arrow {{ image: none; border-left: 4px solid transparent;
     border-right: 4px solid transparent; border-top: 5px solid {text};
