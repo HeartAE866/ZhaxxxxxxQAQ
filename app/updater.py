@@ -12,6 +12,7 @@ import threading
 import urllib.request
 
 from PySide6.QtCore import QObject, Qt, Signal
+from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (QCheckBox, QHBoxLayout, QLabel, QProgressBar,
                                QPushButton)
 
@@ -163,11 +164,24 @@ class UpdateDownload(QObject):
             self.error.emit(str(e))
 
 
+def center_on_screen(win):
+    """居中于主屏幕（而不是居中于父窗口，父窗口可能贴在桌面层）。"""
+    scr = QGuiApplication.screenAt(win.mapToGlobal(win.rect().center())) \
+        or QGuiApplication.primaryScreen()
+    g = scr.availableGeometry()
+    win.adjustSize()
+    win.move(g.center().x() - win.width() // 2,
+              g.center().y() - win.height() // 2)
+
+
 class ChangelogDialog(FramelessDialog):
-    """更新日志：每次更新后展示最近三个版本的更新内容；「以后不再显示」默认勾选。"""
+    """更新日志：每次更新后展示最近三个版本的更新内容；「以后不再显示」默认勾选。
+    非模态 + 置顶 + 屏幕居中：避免遮挡主窗口、避免拦截主窗口点击。"""
 
     def __init__(self, parent, t: dict, version: str):
         super().__init__(parent, t, tr("更新日志"), width=480)
+        self.setModal(False)                     # 不阻塞主窗口
+        self.setWindowFlag(Qt.WindowStaysOnTopHint, True)
         lang = "en" if current_lang() == "en" else "zh"
         for v in changelog_versions(version):
             vtitle = QLabel(f"v{v}")
@@ -189,16 +203,19 @@ class ChangelogDialog(FramelessDialog):
         btn_ok.clicked.connect(self.accept)
         row.addWidget(btn_ok)
         self.body.addLayout(row)
+        center_on_screen(self)
 
 
 class UpdateDialog(FramelessDialog):
-    """发现新版本：一键下载并安装更新。"""
+    """发现新版本：一键下载并安装更新。非模态 + 置顶 + 屏幕居中。"""
     ignored = Signal()                    # 用户选择忽略此版本
     install_requested = Signal()          # 安装器已启动，主程序应退出
 
     def __init__(self, parent, t: dict, tag: str, url: str, name: str,
                  body: str = ""):
         super().__init__(parent, t, tr("发现新版本"), width=460)
+        self.setModal(False)                     # 不阻塞主窗口
+        self.setWindowFlag(Qt.WindowStaysOnTopHint, True)
         self.url, self.name = url, name
         info = QLabel(tr("发现新版本 {v}，是否立即更新？").replace("{v}", tag))
         info.setStyleSheet("font-size:12pt;font-weight:bold;")
@@ -227,6 +244,7 @@ class UpdateDialog(FramelessDialog):
         row.addWidget(btn_ignore)
         row.addWidget(btn_now)
         self.body.addLayout(row)
+        center_on_screen(self)
 
     def _ignore(self):
         self.ignored.emit()

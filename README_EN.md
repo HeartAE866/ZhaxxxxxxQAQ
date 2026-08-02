@@ -47,7 +47,11 @@ A frameless, frosted-glass floating widget that sits on your desktop: work logs,
 ## Install
 
 Download the latest installer from [Releases](https://github.com/HeartAE866/ZhaxxxxxxQAQ/releases)
-(`ZhaxxxxxxQAQ_Setup_v1.2.0.exe`) and run it.
+(`ZhaxxxxxxQAQ_Setup_v1.2.1.exe`) and run it.
+
+**For users in China**: if GitHub is slow or unreachable, use the domestic mirror repository
+[Gitee Mirror](https://gitee.com/HeartAE86/ZhaxxxxxxQAQ) (search "Gitee ZhaxxxxxxQAQ" to find it);
+the in-app auto-update switches to the China mirror automatically — no VPN needed.
 
 > Windows 10/11 (64-bit). Fully offline — uninstall by deleting the app folder.
 

@@ -51,7 +51,7 @@ class SettingsWindow(FramelessDialog):
 
     def __init__(self, app):
         super().__init__(None, app.config.get("theme_settings"), tr("设置"),
-                         width=790)
+                         width=880)
         self.setWindowModality(Qt.NonModal)   # 设置窗不阻塞桌面主窗
         self.app = app
         self.t = app.config.get("theme_settings")

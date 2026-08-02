@@ -54,7 +54,11 @@ A frameless, frosted-glass floating widget on your desktop: auto-created project
 ### Install
 
 Download the latest installer from [Releases](https://github.com/HeartAE866/ZhaxxxxxxQAQ/releases)
-(`ZhaxxxxxxQAQ_Setup_v1.2.0.exe`) and run it.
+(`ZhaxxxxxxQAQ_Setup_v1.2.1.exe`) and run it.
+
+**For users in China**: if GitHub is slow or unreachable, use the domestic mirror repository:
+[Gitee Mirror](https://gitee.com/HeartAE86/ZhaxxxxxxQAQ) (also findable by searching "Gitee ZhaxxxxxxQAQ");
+the in-app auto-update switches to the China mirror automatically — no VPN needed.
 
 > Windows 10/11 (64-bit). Fully offline — uninstall by deleting the app folder.
 
@@ -97,7 +101,11 @@ Download the latest installer from [Releases](https://github.com/HeartAE866/Zhax
 ### 安装
 
 在 [Releases](https://github.com/HeartAE866/ZhaxxxxxxQAQ/releases) 下载最新版安装包
-（`ZhaxxxxxxQAQ_Setup_v1.2.0.exe`），双击安装即可。
+（`ZhaxxxxxxQAQ_Setup_v1.2.1.exe`），双击安装即可。
+
+**国内用户**：GitHub 访问不畅时，可到国内镜像仓库下载：
+[Gitee 镜像仓库](https://gitee.com/HeartAE86/ZhaxxxxxxQAQ)（浏览器搜索「Gitee ZhaxxxxxxQAQ」也能找到）；
+软件内的自动更新会自动切换国内镜像源，无需科学上网。
 
 > Windows 10/11（64 位）。完全本地离线，卸载只需删除安装目录。
 
