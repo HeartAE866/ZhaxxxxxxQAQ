@@ -549,10 +549,14 @@ class FloatWindow(QWidget):
             flags |= Qt.WindowStaysOnBottomHint   # 贴在桌面层
         self.setWindowFlags(flags)
         self.setAttribute(Qt.WA_TranslucentBackground)
+        self._user_resized = bool(cfg.get("user_resized"))
         w = cfg.get("w") or 330
         x, y = cfg.get("x"), cfg.get("y")
         if x is not None and y is not None:
-            self.setGeometry(x, y, w, min(self.height() or 400, 500))
+            if self._user_resized and cfg.get("h"):
+                self.setGeometry(x, y, w, cfg["h"])
+            else:
+                self.setGeometry(x, y, w, min(self.height() or 400, 500))
         else:
             scr = self.screen().availableGeometry()
             self.setGeometry(scr.right() - w - 40, scr.top() + 60, w, 420)
@@ -568,7 +572,8 @@ class FloatWindow(QWidget):
         if self.app.config.get("window", "compact"):
             return
         self.app.config.data.setdefault("window", {}).update(
-            x=self.x(), y=self.y(), w=self.width())
+            x=self.x(), y=self.y(), w=self.width(),
+            h=self.height(), user_resized=self._user_resized)
         self.app.config.save()
 
     def refresh_theme(self):
@@ -815,9 +820,14 @@ class FloatWindow(QWidget):
                     return True
             if typ == QEvent.MouseButtonRelease and ev.button() == Qt.LeftButton:
                 if self._resize_dir:
+                    start_geo = self._resize_start[1]
                     self._resize_dir = None
                     self._resize_start = None
                     obj.releaseMouse()
+                    if self.height() != start_geo.height():
+                        # 用户主动缩放过高度：锁定自定义高度，
+                        # 后续操作(fit)不再重算高度，仅防止超出屏幕
+                        self._user_resized = True
                     self.save_geometry()
                     return True
         return super().eventFilter(obj, ev)
