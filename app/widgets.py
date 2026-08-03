@@ -528,6 +528,25 @@ def manual_ulw_window(win: QWidget) -> bool:
         return False
 
 
+def embed_to_desktop_bottom(win: QWidget) -> bool:
+    """桌面化：窗口置于桌面层(Progman)之上、普通窗口之下——嵌于桌面。
+    挂件在桌面图标层之上（可点击），普通窗口打开时自然覆盖挂件。"""
+    try:
+        user32 = _user32()
+        progman = user32.FindWindowW("Progman", None)
+        hwnd = wintypes.HWND(int(win.winId()))
+        if progman:
+            prev = user32.GetWindow(wintypes.HWND(progman), 3)  # GW_HWNDPREV
+            insert_after = int(prev) if prev else 0
+            user32.SetWindowPos(hwnd, wintypes.HWND(insert_after), 0, 0, 0, 0,
+                                _SWP_NOSIZE | _SWP_NOMOVE | _SWP_NOACTIVATE)
+            return True
+        return False
+    except Exception:
+        log.error("embed_to_desktop_bottom 异常:\n" + traceback.format_exc())
+        return False
+
+
 # ---------------------------------------------------------------- 矢量图标按钮
 class _VectorButton(QPushButton):
     """用 QPainter 绘制矢量图标的按钮（比文本符号更清晰可缩放）。"""

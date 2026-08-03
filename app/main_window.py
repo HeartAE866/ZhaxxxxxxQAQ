@@ -23,7 +23,7 @@ from widgets import (BgFrame, CompactIconButton,
                      embed_to_desktop_if_needed,
                      shell_tray_alive, unembed_from_desktop, apply_window_corners,
                      embed_to_desktop_lively, unembed_from_desktop_lively,
-                     manual_ulw_window)
+                     manual_ulw_window, embed_to_desktop_bottom)
 
 WEEKDAYS = ["一", "二", "三", "四", "五", "六", "日"]
 WEEKDAYS_EN = ["Monday", "Tuesday", "Wednesday", "Thursday",
@@ -574,40 +574,53 @@ class FloatWindow(QWidget):
             set_window_z_order(self, True)   # 强制置顶 Z 序
             unembed_from_desktop(self)       # 解除桌面嵌入，还原为普通顶层窗口
         if cfg.get("wallpaper"):
-            self._setup_wallpaper_lively()
+            self._setup_wallpaper_bottom()
         self.save_geometry()                 # 持久化位置，供崩溃重建后恢复
 
-    def _manual_ulw_once(self):
-        """手动 ULW 呈现兜底（500ms）。"""
-        if getattr(self, "_wallpaper", False):
-            manual_ulw_window(self)
-
-    def _setup_wallpaper_lively(self):
-        """壁纸模式（Lively Wallpaper 机制）：窗口保持 translucent
-        (WS_EX_LAYERED + UpdateLayeredWindow 呈现)，SetParent 到 Progman
-        ——Win+D 不消失、普通子窗口黑块问题绕开。Progman 原点(0,0)=屏幕坐标，
-        位置无需转换，拖拽/缩放照常工作。"""
+    def _setup_wallpaper_bottom(self):
+        """壁纸/桌面化模式：窗口置底（嵌于桌面层之上），Win+D「显示桌面」
+        会隐藏窗口或把桌面层压到窗口上方——定时守护双重恢复（ShowWindow
+        强制显示 + Z 序插回桌面层之上）。Qt 顶层渲染正常（非子窗口）。"""
         try:
             if getattr(self, "_wallpaper", False):
                 return
-            if not embed_to_desktop_lively(self):
-                return
             self._wallpaper = True
-            h = self.windowHandle()
-            log.info(f"壁纸模式已启用 (Lively 机制) geo=({self.x()},{self.y()} "
-                     f"{self.width()}x{self.height()}) "
-                     f"isTopLevel={h.isTopLevel() if h else None} "
-                     f"parent={type(h.parent()).__name__ if h and h.parent() else None} "
-                     f"isVisible={self.isVisible()} native={bool(self.winId())}")
-            # SetParent 后强制多次重绘，确保 Qt 重新 flush(ULW) 呈现
-            for delay in (50, 200, 600, 1500):
-                QTimer.singleShot(delay, self.update)
-            QTimer.singleShot(1000, self.repaint)
-            # 兜底：手动 UpdateLayeredWindow 呈现（Qt flush 失效时直接提交合成器）
-            self._ulw_timer = QTimer(self, timeout=self._manual_ulw_once, interval=500)
-            self._ulw_timer.start()
+            embed_to_desktop_bottom(self)
+            self._wind_timer = QTimer(self, interval=800,
+                                      timeout=self._wind_guard)
+            self._wind_timer.start()
+            log.info(f"壁纸模式已启用 (置底+Win+D守护) geo=({self.x()},{self.y()} "
+                     f"{self.width()}x{self.height()})")
         except Exception:
-            log.error("_setup_wallpaper_lively 异常:\n" + traceback.format_exc())
+            log.error("_setup_wallpaper_bottom 异常:\n" + traceback.format_exc())
+
+    def _wind_guard(self):
+        """Win+D 守护：窗口被系统隐藏时 ShowWindow 强制恢复；
+        桌面层压到窗口上方时把窗口插回桌面层之上。"""
+        try:
+            if not self._expect_visible:
+                return
+            u32 = ctypes.windll.user32
+            hwnd = int(self.winId())
+            # 1) 隐藏检测：系统外部隐藏（Qt 不感知），ShowWindow 强制恢复
+            if not u32.IsWindowVisible(wintypes.HWND(hwnd)):
+                u32.ShowWindow(wintypes.HWND(hwnd), 5)  # SW_SHOW
+                return
+            # 2) Z 序检测：桌面层(Progman)在窗口上方时插回其上方
+            prev = u32.GetWindow(wintypes.HWND(hwnd), 3)  # GW_HWNDPREV
+            guard = 0
+            while prev and guard < 200:
+                buf = ctypes.create_unicode_buffer(64)
+                u32.GetClassNameW(prev, buf, 64)
+                cls = buf.value
+                if cls == "Progman" or (cls == "WorkerW" and u32.FindWindowExW(
+                        wintypes.HWND(prev), None, "SHELLDLL_DefView", None)):
+                    embed_to_desktop_bottom(self)
+                    return
+                prev = u32.GetWindow(prev, 3)
+                guard += 1
+        except Exception:
+            pass
 
     def save_geometry(self):
         if self.app.config.get("window", "compact"):

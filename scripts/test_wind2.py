@@ -18,19 +18,22 @@ def win_d_press():
 
 
 def find_app():
-    """应用是 Progman 的子窗口（Lively 机制：Progman → 应用窗口）。"""
+    """应用是顶层 Tool 窗口（置底+守护模式）。"""
     cls = "Qt6111QWindowToolSaveBits"
     found = []
-    progman = u.FindWindowW("Progman", None)
-    if not progman:
-        return found
-    ch = u.GetWindow(wintypes.HWND(progman), 5)  # GW_CHILD
-    while ch:
+
+    @ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)
+    def cb(h, _):
         buf = ctypes.create_unicode_buffer(64)
-        u.GetClassNameW(ch, buf, 64)
-        if buf.value == cls and u.IsWindowVisible(ch):
-            found.append(int(ch))
-        ch = u.GetWindow(ch, 2)
+        u.GetClassNameW(h, buf, 64)
+        if buf.value == cls and u.IsWindowVisible(h):
+            r = wintypes.RECT()
+            u.GetWindowRect(h, ctypes.byref(r))
+            if r.right - r.left > 100:   # 排除 Toast 等小窗口
+                found.append(int(h))
+        return True
+
+    u.EnumWindows(cb, 0)
     return found
 
 
