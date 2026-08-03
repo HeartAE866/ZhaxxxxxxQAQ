@@ -37,10 +37,12 @@ HOOKPROC = ctypes.CFUNCTYPE(c_ssize_t, c_int,
 class HotkeyPoller(QObject):
     """全局快捷键（替代旧的 50ms 常驻轮询，接口不变）。"""
     fired = Signal(str)
+    wind_pressed = Signal()   # 壁纸模式：Win+D 被拦截（由应用转发为 Win+M）
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.combos: dict[str, tuple] = {}   # action -> (VK组, ...)
+        self.wind_intercept = False   # True：拦截 Win+D（桌面提升会盖住挂件）
         self._down: set[int] = set()
         self._active: set[str] = set()
         self._hook = None
@@ -80,6 +82,11 @@ class HotkeyPoller(QObject):
                 kbd = cast(l_param, POINTER(KBDLLHOOKSTRUCT))
                 vk = int(kbd.contents.vkCode)
                 if w_param in (WM_KEYDOWN, WM_SYSKEYDOWN):
+                    # 壁纸模式：拦截 Win+D（桌面提升会盖住挂件），转发为 Win+M
+                    if self.wind_intercept and vk == 0x44:  # 'D'
+                        if self._u32.GetAsyncKeyState(0x5B) & 0x8000:  # LWIN
+                            self.wind_pressed.emit()
+                            return 1   # 吞掉按键，不传给系统
                     self._key_down(vk)
                 elif w_param in (WM_KEYUP, WM_SYSKEYUP):
                     self._key_up(vk)

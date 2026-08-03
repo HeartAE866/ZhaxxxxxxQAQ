@@ -21,7 +21,9 @@ from i18n import tr, current_lang
 from widgets import (BgFrame, CompactIconButton,
                      set_click_through, set_window_z_order, apply_frosted,
                      embed_to_desktop_if_needed,
-                     shell_tray_alive, unembed_from_desktop, apply_window_corners)
+                     shell_tray_alive, unembed_from_desktop, apply_window_corners,
+                     get_wallpaper_workerw, embed_to_sys_workerw,
+                     embed_to_desktop_bottom)
 
 WEEKDAYS = ["一", "二", "三", "四", "五", "六", "日"]
 WEEKDAYS_EN = ["Monday", "Tuesday", "Wednesday", "Thursday",
@@ -433,6 +435,8 @@ class FloatWindow(QWidget):
         # 桌面层体检：Explorer 崩溃/重启导致 WorkerW 重建后自动恢复嵌入
         self._embed_check = QTimer(self, interval=5000, timeout=self._embed_health)
         self._embed_check.start()
+        self._workerw = 0      # 壁纸模式：系统壁纸层 WorkerW 句柄
+        self._wallpaper = False  # 壁纸模式标志
         self._expect_visible = True   # 窗口应显示状态（用于体检时区分用户隐藏）
         self._native_hwnd = 0
         self._update_clock()
@@ -570,7 +574,39 @@ class FloatWindow(QWidget):
         if cfg.get("topmost"):
             set_window_z_order(self, True)   # 强制置顶 Z 序
             unembed_from_desktop(self)       # 解除桌面嵌入，还原为普通顶层窗口
+        if cfg.get("wallpaper"):
+            self._setup_wallpaper()
         self.save_geometry()                 # 持久化位置，供崩溃重建后恢复
+
+    def _setup_wallpaper(self):
+        """壁纸模式：置底（嵌于桌面层之上）+ 拦截 Win+D 转发为 Win+M。
+        Win+D 的「桌面提升」会把壁纸层渲染在挂件之上（Z 序无解）；
+        改为拦截 Win+D → 模拟 Win+M（最小化所有，无桌面提升）——
+        桌面正常显示且挂件保留。"""
+        try:
+            if getattr(self, "_wallpaper", False):
+                return
+            self._wallpaper = True
+            embed_to_desktop_bottom(self)
+            hp = getattr(self.app, "hotkeys", None)
+            if hp is not None:
+                hp.wind_intercept = True
+                hp.wind_pressed.connect(self._on_wind_pressed)
+            log.info(f"壁纸模式已启用 (置底+Win+D拦截) "
+                     f"geo=({self.x()},{self.y()} {self.width()}x{self.height()})")
+        except Exception:
+            log.error("_setup_wallpaper 异常:\n" + traceback.format_exc())
+
+    def _on_wind_pressed(self):
+        """Win+D 被拦截：模拟 Win+M（最小化所有窗口，切换显示桌面）。"""
+        try:
+            u32 = ctypes.windll.user32
+            u32.keybd_event(0x5B, 0, 0, 0)       # LWIN down
+            u32.keybd_event(0x4D, 0, 0, 0)       # M down
+            u32.keybd_event(0x4D, 0, 0x0002, 0)  # M up
+            u32.keybd_event(0x5B, 0, 0x0002, 0)  # LWIN up
+        except Exception:
+            pass
 
     def save_geometry(self):
         if self.app.config.get("window", "compact"):
