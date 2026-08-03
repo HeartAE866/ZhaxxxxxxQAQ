@@ -28,6 +28,18 @@ TIMEOUT = 8
 
 # 各版本更新日志（zh / en），新版本发布时在此追加条目；弹窗展示最近三个版本
 CHANGELOGS = {
+    "1.3.0beta": {
+        "zh": "🧟 幽灵窗口彻底根治：\n"
+              "· 🐛 修复：操作时屏幕中央一闪而过的幽灵窗口——重建时容器未父化即被系统显示为独立窗口；任何操作（添加/删除/拖拽/搜索/设置/重启）不再闪烁\n"
+              "· 📏 新增：记忆窗口尺寸——用户自定义窗口高度后不再被操作重置，重启后保持\n"
+              "· 📑 新增：记忆展开状态——项目栏/循环任务/网址直达的收展状态重启后保持\n"
+              "· 🖱 操作提示恢复：右上角 Toast 提示恢复（与幽灵窗口无关）",
+        "en": "🧟 Ghost window completely eliminated:\n"
+              "· 🐛 Fixed: ghost windows flashing at screen center on every action (containers were shown before being parented during rebuild); no more flicker on add/delete/drag/search/settings/restart\n"
+              "· 📏 New: window size memory — custom window height is kept across operations and restarts\n"
+              "· 📑 New: collapse state memory — year/month groups, recurring tasks & quick links keep their open/closed state after restart\n"
+              "· 🖱 Restored: corner Toast notifications (unrelated to ghost windows)",
+    },
     "1.3.0": {
         "zh": "⚡ 深度性能与桌面体验优化：\n"
               "· 🖱 桌面嵌入升级：挂件真正融入桌面图标层，可像普通窗口一样直接点击操作\n"
