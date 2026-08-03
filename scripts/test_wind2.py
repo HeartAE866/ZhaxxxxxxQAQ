@@ -18,25 +18,19 @@ def win_d_press():
 
 
 def find_app():
-    """应用已嵌入 WorkerW（Progman → ZhaxxWorkerW → 应用）。"""
+    """应用是 Progman 的子窗口（Lively 机制：Progman → 应用窗口）。"""
     cls = "Qt6111QWindowToolSaveBits"
     found = []
     progman = u.FindWindowW("Progman", None)
     if not progman:
         return found
-    ww = u.GetWindow(wintypes.HWND(progman), 5)  # GW_CHILD
-    while ww:
+    ch = u.GetWindow(wintypes.HWND(progman), 5)  # GW_CHILD
+    while ch:
         buf = ctypes.create_unicode_buffer(64)
-        u.GetClassNameW(ww, buf, 64)
-        if buf.value == "ZhaxxWorkerW":
-            ch = u.GetWindow(ww, 5)
-            while ch:
-                buf2 = ctypes.create_unicode_buffer(64)
-                u.GetClassNameW(ch, buf2, 64)
-                if buf2.value == cls and u.IsWindowVisible(ch):
-                    found.append(int(ch))
-                ch = u.GetWindow(ch, 2)
-        ww = u.GetWindow(ww, 2)
+        u.GetClassNameW(ch, buf, 64)
+        if buf.value == cls and u.IsWindowVisible(ch):
+            found.append(int(ch))
+        ch = u.GetWindow(ch, 2)
     return found
 
 

@@ -21,7 +21,8 @@ from i18n import tr, current_lang
 from widgets import (BgFrame, CompactIconButton,
                      set_click_through, set_window_z_order, apply_frosted,
                      embed_to_desktop_if_needed,
-                     shell_tray_alive, unembed_from_desktop, apply_window_corners)
+                     shell_tray_alive, unembed_from_desktop, apply_window_corners,
+                     embed_to_desktop_lively, unembed_from_desktop_lively)
 
 WEEKDAYS = ["一", "二", "三", "四", "五", "六", "日"]
 WEEKDAYS_EN = ["Monday", "Tuesday", "Wednesday", "Thursday",
@@ -433,6 +434,7 @@ class FloatWindow(QWidget):
         # 桌面层体检：Explorer 崩溃/重启导致 WorkerW 重建后自动恢复嵌入
         self._embed_check = QTimer(self, interval=5000, timeout=self._embed_health)
         self._embed_check.start()
+        self._wallpaper = False   # 壁纸模式（Lively 机制）标志
         self._expect_visible = True   # 窗口应显示状态（用于体检时区分用户隐藏）
         self._native_hwnd = 0
         self._update_clock()
@@ -570,7 +572,25 @@ class FloatWindow(QWidget):
         if cfg.get("topmost"):
             set_window_z_order(self, True)   # 强制置顶 Z 序
             unembed_from_desktop(self)       # 解除桌面嵌入，还原为普通顶层窗口
+        if cfg.get("wallpaper"):
+            self._setup_wallpaper_lively()
         self.save_geometry()                 # 持久化位置，供崩溃重建后恢复
+
+    def _setup_wallpaper_lively(self):
+        """壁纸模式（Lively Wallpaper 机制）：窗口保持 translucent
+        (WS_EX_LAYERED + UpdateLayeredWindow 呈现)，SetParent 到 Progman
+        ——Win+D 不消失、普通子窗口黑块问题绕开。Progman 原点(0,0)=屏幕坐标，
+        位置无需转换，拖拽/缩放照常工作。"""
+        try:
+            if getattr(self, "_wallpaper", False):
+                return
+            if not embed_to_desktop_lively(self):
+                return
+            self._wallpaper = True
+            log.info(f"壁纸模式已启用 (Lively 机制) geo=({self.x()},{self.y()} "
+                     f"{self.width()}x{self.height()})")
+        except Exception:
+            log.error("_setup_wallpaper_lively 异常:\n" + traceback.format_exc())
 
     def save_geometry(self):
         if self.app.config.get("window", "compact"):

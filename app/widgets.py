@@ -208,7 +208,8 @@ def _user32():
     global _user32_cache
     if _user32_cache is None:
         u = ctypes.windll.user32
-        for _fn in ("GetAncestor", "SetParent", "GetWindow", "FindWindowW"):
+        for _fn in ("GetAncestor", "SetParent", "GetWindow", "FindWindowW",
+                    "FindWindowExW"):
             getattr(u, _fn).restype = wintypes.HWND
         _user32_cache = u
     return _user32_cache
@@ -352,6 +353,80 @@ def unembed_from_desktop(win: QWidget):
             user32.SetWindowLongPtrW(hwnd, _GWL_STYLE, style & ~_WS_CHILD)
         user32.SetWindowPos(hwnd, wintypes.HWND(-1), 0, 0, 0, 0,
                             _SWP_NOSIZE | _SWP_NOMOVE | _SWP_NOACTIVATE)
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------- 壁纸层（Lively Wallpaper 机制）
+"""Lively Wallpaper 同款桌面嵌入（Raised Desktop 适配）：
+Win11 的 Progman 带 WS_EX_NOREDIRECTIONBITMAP（无重定向表面），普通子窗口
+内容无处合成（黑块）；壁纸/挂件窗口必须是 WS_EX_LAYERED 子窗口（独立合成）。
+Qt 的 WA_TranslucentBackground 窗口即 layered + UpdateLayeredWindow 呈现
+（直接提交合成器，绕开重定向表面）。SetParent 到 Progman（原点 0,0 =
+屏幕坐标，位置无需转换），Z 序置于 DefView 之上（可点击交互）。"""
+
+
+def is_raised_desktop() -> bool:
+    """Win11 新版桌面：Progman 是否带 WS_EX_NOREDIRECTIONBITMAP。"""
+    try:
+        progman = _user32().FindWindowW("Progman", None)
+        if not progman:
+            return False
+        ex = _user32().GetWindowLongPtrW(wintypes.HWND(progman), -20)
+        return bool(ex & 0x00200000)  # WS_EX_NOREDIRECTIONBITMAP
+    except Exception:
+        return False
+
+
+def embed_to_desktop_lively(win: QWidget) -> bool:
+    """Lively 机制嵌入：WS_CHILD + SetParent(Progman) + Z 序在 DefView 之上。
+    窗口必须保持 WS_EX_LAYERED（Qt translucent 自带；Lively 注释：Godot 在
+    SetParent 后无法再应用 WS_EX_LAYERED，所以先确保 layered 再 SetParent）。"""
+    try:
+        user32 = _user32()
+        progman = user32.FindWindowW("Progman", None)
+        if not progman:
+            return False
+        hwnd = wintypes.HWND(int(win.winId()))
+        # 1) WS_CHILD
+        style = user32.GetWindowLongPtrW(hwnd, _GWL_STYLE)
+        if not style & _WS_CHILD:
+            user32.SetWindowLongPtrW(hwnd, _GWL_STYLE, style | _WS_CHILD)
+        # 2) 确保 WS_EX_LAYERED（Qt translucent 通常已带；缺失则补上）
+        ex = user32.GetWindowLongPtrW(hwnd, -20)
+        if not ex & 0x80000:
+            user32.SetWindowLongPtrW(hwnd, -20, ex | 0x80000)
+        # 3) SetParent 到 Progman
+        user32.SetParent(hwnd, wintypes.HWND(progman))
+        # 4) 位置：相对 Progman(0,0) = 屏幕坐标
+        user32.SetWindowPos(hwnd, wintypes.HWND(0), win.x(), win.y(),
+                            win.width(), win.height(), 0x0010)  # SWP_NOACTIVATE
+        # 5) Z 序：置于 DefView 之上（挂件可点击交互）。
+        # SetWindowPos 置顶对 DefView 无效（Explorer 保持图标层顶层），
+        # 需反向把 DefView 压到应用窗口之下。
+        defview = user32.FindWindowExW(wintypes.HWND(progman), None,
+                                       "SHELLDLL_DefView", None)
+        if defview:
+            user32.SetWindowPos(wintypes.HWND(defview), hwnd, 0, 0, 0, 0,
+                                _SWP_NOSIZE | _SWP_NOMOVE | _SWP_NOACTIVATE)
+        return True
+    except Exception:
+        log.error("embed_to_desktop_lively 异常:\n" + traceback.format_exc())
+        return False
+
+
+def unembed_from_desktop_lively(win: QWidget):
+    """解除 Lively 机制嵌入：还原为普通顶层窗口。"""
+    try:
+        user32 = _user32()
+        hwnd = wintypes.HWND(int(win.winId()))
+        user32.SetParent(hwnd, wintypes.HWND(0))
+        style = user32.GetWindowLongPtrW(hwnd, _GWL_STYLE)
+        if style & _WS_CHILD:
+            user32.SetWindowLongPtrW(hwnd, _GWL_STYLE, style & ~_WS_CHILD)
+        user32.SetWindowPos(hwnd, wintypes.HWND(-1), 0, 0, 0, 0,
+                            _SWP_NOSIZE | _SWP_NOMOVE | _SWP_NOACTIVATE)
+        user32.ShowWindow(hwnd, 5)
     except Exception:
         pass
 
