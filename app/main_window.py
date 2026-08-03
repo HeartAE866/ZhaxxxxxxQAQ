@@ -266,9 +266,9 @@ class GroupHeader(QFrame):
 
     def mousePressEvent(self, e):
         if e.button() == Qt.LeftButton:
-            self.win.expanded[self.key] = not self.win.expanded.get(self.key, False)
-            # 组头展开/收起：不重算窗口高度（保持用户调整过的长度，超高部分内容区滚动）
-            self.win.refresh(fit=False)
+            # 就地切换组容器可见性：不重建内容、不改变窗口高度、
+            # 避免全量重建导致的窗口闪烁（“幽灵窗口”）
+            self.win.toggle_group(self.key)
 
 
 # ---------------------------------------------------------------- 悬浮主窗
@@ -288,6 +288,7 @@ class FloatWindow(QWidget):
         self._compact_pressed = False
         self._compact_moved = False
         self._rows: list[ItemRow] = []
+        self._group_headers: dict[str, GroupHeader] = {}  # key → 组头（展开/收起就地切换用）
         self._user_resized = False     # 用户手动缩放过窗口高度后，展开/收起不再重算高度
         self._pre_compact_h = None     # 进入紧凑模式前的高度（退出时恢复，不覆盖用户调整）
         self.setWindowTitle(core.APP_NAME)
@@ -597,9 +598,10 @@ class FloatWindow(QWidget):
         self._expect_visible = not hidden
 
     def _embed_health(self):
-        """5s 体检：窗口应随桌面层存活，Explorer 崩溃/重启后自动恢复。
-        三种情况：原生窗口被销毁 → 重建；原生窗口在但隐藏 → 强制恢复显示；
-        一切正常 → 保持/恢复桌面层嵌入。"""
+        """5s 体检：桌面层嵌入已禁用——本机视频壁纸环境与 WorkerW 嵌入冲突
+        （嵌入后窗口被压缩为窄条且不可见），保持普通悬浮窗（1.2.1 行为）。"""
+        return
+        # ---- 以下为原嵌入逻辑（保留代码备查，不再执行） ----
         if self.app.config.get("window", "topmost"):
             return
         try:
@@ -623,10 +625,10 @@ class FloatWindow(QWidget):
             pass
 
     def _ensure_desktop_embed(self):
-        """非置顶时把窗口嵌入桌面背景层（Win+D 不隐藏、融入桌面）；
-        置顶模式下保持普通置顶窗口。
-        Explorer 崩溃时其 WorkerW 随进程销毁，嵌入其中的窗口会被系统
-        一并销毁（DestroyWindow 语义），这里检测到后重建原生窗口并重新嵌入。"""
+        """桌面嵌入已禁用——本机视频壁纸环境与 WorkerW 嵌入冲突
+        （嵌入后窗口被压缩为窄条且不可见），保持普通悬浮窗。"""
+        return
+        # ---- 以下为原嵌入逻辑（保留代码备查，不再执行） ----
         if self.app.config.get("window", "topmost"):
             return
         try:
@@ -958,11 +960,13 @@ class FloatWindow(QWidget):
 
         # ------- 年 → 月 → 任务
         today = date.today()
+        self._group_headers = {}
         for year in sorted(months.keys(), reverse=True):
             ykey = f"y{year}"
             y_open = self.expanded.get(ykey, True)
             self.expanded[ykey] = y_open
             yheader = GroupHeader(self, tr("{y}年").replace("{y}", str(year)), ykey)
+            self._group_headers[ykey] = yheader
             self.content_lay.addWidget(yheader)
             ycont = QWidget()
             ylay = QVBoxLayout(ycont)
@@ -974,6 +978,7 @@ class FloatWindow(QWidget):
                 self.expanded[mkey] = m_open
                 mitems = months[year][month]
                 mheader = GroupHeader(self, tr("{m}月").replace("{m}", str(month)), mkey)
+                self._group_headers[mkey] = mheader
                 ylay.addWidget(mheader)
                 mcont = QWidget()
                 mlay = QVBoxLayout(mcont)
@@ -987,6 +992,7 @@ class FloatWindow(QWidget):
                 mcont.setProperty("group_key", mkey)
                 ylay.addWidget(mcont)
             ycont.setVisible(y_open)
+            ycont.setProperty("group_key", ykey)
             self.content_lay.addWidget(ycont)
 
         # ------- 循环任务独立区
@@ -1043,11 +1049,41 @@ class FloatWindow(QWidget):
         self.resize(self.width(),
                     min(max(need, 160), max(160, scr.height() - 60)))
 
+    def toggle_group(self, key: str):
+        """组头展开/收起：就地切换容器可见性，不重建内容、不改变窗口高度、
+        不触发全量重绘（消除每次操作的窗口闪烁“幽灵窗口”）。"""
+        container = self._find_group_container(key)
+        if container is None:
+            self.refresh(fit=False)
+            return
+        new_state = not container.isVisible()
+        container.setVisible(new_state)
+        self.expanded[key] = new_state
+        header = self._group_headers.get(key)
+        if header is not None:
+            header.refresh_arrow()
+
+    def _find_group_container(self, key):
+        for i in range(self.content_lay.count()):
+            w = self.content_lay.itemAt(i).widget()
+            if not w:
+                continue
+            if w.property("group_key") == key:
+                return w
+            sub = w.layout()
+            if sub:
+                for j in range(sub.count()):
+                    c = sub.itemAt(j).widget()
+                    if c and c.property("group_key") == key:
+                        return c
+        return None
+
     def _add_recur_section(self, recurs):
         key = "recur"
         r_open = self.expanded.get(key, True)
         self.expanded[key] = r_open
         header = GroupHeader(self, tr("🔁 循环任务"), key)
+        self._group_headers[key] = header
         self.content_lay.addWidget(header)
         cont = QWidget()
         lay = QVBoxLayout(cont)
@@ -1066,6 +1102,7 @@ class FloatWindow(QWidget):
         l_open = self.expanded.get(key, True)
         self.expanded[key] = l_open
         header = GroupHeader(self, tr("🔗 网址直达"), key)
+        self._group_headers[key] = header
         self.content_lay.addWidget(header)
         cont = QWidget()
         lay = QVBoxLayout(cont)
