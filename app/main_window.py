@@ -913,8 +913,19 @@ class FloatWindow(QWidget):
                 r.refresh_soft()
             return
 
+        # 全量重建期间禁用重绘：消除“幽灵窗口”（重建中间态闪烁），
+        # 重建完成后一次性绘制最终内容
+        self.setUpdatesEnabled(False)
+        try:
+            self._do_rebuild(fit)
+        finally:
+            self.setUpdatesEnabled(True)
+            self.update()
+
+    def _do_rebuild(self, fit=True):
         # 清空
         self._rows = []
+        self._group_headers = {}
         self.expanded = {k: v for k, v in self.expanded.items()
                          if k.startswith(("y", "m")) or k in ("recur", "link")}
         while self.content_lay.count():
