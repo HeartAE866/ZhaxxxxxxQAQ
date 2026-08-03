@@ -917,12 +917,27 @@ class FloatWindow(QWidget):
         # 重建完成后一次性绘制最终内容
         self.setUpdatesEnabled(False)
         try:
-            self._do_rebuild(fit)
+            self._do_rebuild()
+        finally:
+            self.setUpdatesEnabled(True)
+            self.update()
+        if fit:
+            # 布局要等事件循环一轮后才收敛（sizeHint 才准确），
+            # 延迟适配高度，且 resize 在抑制重绘期间完成，一次绘制最终尺寸
+            QTimer.singleShot(0, self._fit_height_async)
+
+    def _fit_height_async(self):
+        if not self.isVisible():
+            return
+        self.setUpdatesEnabled(False)
+        try:
+            self._fit_height()
+            apply_window_corners(self, self.t)
         finally:
             self.setUpdatesEnabled(True)
             self.update()
 
-    def _do_rebuild(self, fit=True):
+    def _do_rebuild(self):
         # 清空
         self._rows = []
         self._group_headers = {}
@@ -1023,9 +1038,6 @@ class FloatWindow(QWidget):
         # 平铺：窗口高度随内容自适应（无滚动条）；布局生效后再校正一次，
         # 因为新控件要等事件循环处理后 sizeHint 才准确
         self.content_lay.activate()
-        if fit:
-            self._fit_height()
-            QTimer.singleShot(0, self._fit_height)
         apply_window_corners(self, self.t)
         self._refresh_clock_panel_visibility()
 
