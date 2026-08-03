@@ -29,17 +29,21 @@ WEEKDAYS_EN = ["Monday", "Tuesday", "Wednesday", "Thursday",
 
 # ---------------------------------------------------------------- 提醒行（独立区域）
 class ReminderChip(QFrame):
-    """提醒栏里的单条提醒：时间 + 内容，超长自动换行；左键编辑，右键菜单。"""
+    """提醒栏里的单条提醒：时间 + 内容，超长自动换行；左键编辑，右键菜单。
+    左侧拖拽手柄支持自由排序（与循环任务/网址直达一致）。"""
 
     def __init__(self, win, item: dict):
         super().__init__()
         self.win, self.item = win, item
+        self.group_key = "reminder"
         self.setObjectName("ReminderChip")
         self.setCursor(Qt.PointingHandCursor)
         t = win.t
+        self.t = t
         lay = QHBoxLayout(self)
         lay.setContentsMargins(8, 3, 8, 3)
         lay.setSpacing(4)
+        lay.addWidget(DragHandle(self), 0, Qt.AlignVCenter)
         rt = core.parse_dt(item.get("remind_time"))
         overdue = bool(rt and rt < core.now())
         time_txt = rt.strftime("%m-%d %H:%M") if rt else item.get("remind_time", "")
@@ -343,6 +347,7 @@ class FloatWindow(QWidget):
         btn_rm.clicked.connect(lambda: self.app.add_reminder())
         rp_lay.addWidget(btn_rm)
         self.reminder_panel.setVisible(False)
+        self.reminder_panel.setProperty("group_key", "reminder")
         self.main_lay.insertWidget(1, self.reminder_panel)
 
         # 内容区：按 年→月 分组平铺；内容超高时滚动查看（滚轮，无滚动条）
@@ -1014,14 +1019,18 @@ class FloatWindow(QWidget):
         self._refresh_clock_panel_visibility()
 
     def _rebuild_reminder_bar(self, reminds):
-        """重建提醒区：未完成的提醒按时间升序显示，文字自动换行。"""
+        """重建提醒区：未完成的提醒显示；已手动拖拽排序的按 order 在前，
+        未排序的按提醒时间升序。文字自动换行。"""
         while self.reminder_lay.count():
             w = self.reminder_lay.takeAt(0)
             if w.widget():
                 w.widget().deleteLater()
         active = [r for r in reminds if not r.get("done")]
-        active.sort(key=lambda r: core.parse_dt(r.get("remind_time")) or core.now())
-        for it in active:
+        rest = [r for r in active if not (r.get("order") or 0) > 0]
+        rest.sort(key=lambda r: core.parse_dt(r.get("remind_time")) or core.now())
+        ordered = [r for r in active if (r.get("order") or 0) > 0]
+        ordered.sort(key=lambda r: r.get("order", 0))
+        for it in ordered + rest:
             self.reminder_lay.addWidget(ReminderChip(self, it))
         self.reminder_panel.setVisible(bool(active) and self.panel.isVisible())
 
@@ -1046,8 +1055,12 @@ class FloatWindow(QWidget):
             need += self.reminder_panel.sizeHint().height()
         if self.clock_panel.isVisible():
             need += self.clock_panel.sizeHint().height()
-        self.resize(self.width(),
-                    min(max(need, 160), max(160, scr.height() - 60)))
+        # 修复：内容超高时窗口最高到屏幕外——窗口底部不超出屏幕底部
+        # （窗口顶部在屏幕内时，按窗口位置收紧上限）
+        limit = max(160, scr.height() - 60)
+        if scr.top() <= self.y() <= scr.bottom():
+            limit = max(160, min(limit, scr.bottom() - self.y()))
+        self.resize(self.width(), min(max(need, 160), limit))
 
     def toggle_group(self, key: str):
         """组头展开/收起：就地切换容器可见性，不重建内容、不改变窗口高度、
@@ -1062,21 +1075,6 @@ class FloatWindow(QWidget):
         header = self._group_headers.get(key)
         if header is not None:
             header.refresh_arrow()
-
-    def _find_group_container(self, key):
-        for i in range(self.content_lay.count()):
-            w = self.content_lay.itemAt(i).widget()
-            if not w:
-                continue
-            if w.property("group_key") == key:
-                return w
-            sub = w.layout()
-            if sub:
-                for j in range(sub.count()):
-                    c = sub.itemAt(j).widget()
-                    if c and c.property("group_key") == key:
-                        return c
-        return None
 
     def _add_recur_section(self, recurs):
         key = "recur"
@@ -1137,12 +1135,13 @@ class FloatWindow(QWidget):
         return todos + records + others
 
     # ---------------- 拖拽排序
-    def _drag_start(self, row: ItemRow):
+    def _drag_start(self, row):
         if self.app.config.get("window", "locked"):
             return
         self._drag_row = row
+        name = row.objectName() or "ItemRow"
         row.setStyleSheet(
-            f"#ItemRow{{background-color:{theme_mod.rgba(self.t['accent'],60)};"
+            f"#{name}{{background-color:{theme_mod.rgba(self.t['accent'],60)};"
             f"border-radius:8px;}}")
 
     def _drag_move(self, gpos):
@@ -1152,9 +1151,9 @@ class FloatWindow(QWidget):
         container = self._find_group_container(key)
         if not container:
             return
-        lay = container.layout()
+        lay = self.reminder_lay if key == "reminder" else container.layout()
         rows = [lay.itemAt(i).widget() for i in range(lay.count())
-                if isinstance(lay.itemAt(i).widget(), ItemRow)]
+                if isinstance(lay.itemAt(i).widget(), (ItemRow, ReminderChip))]
         # 指示条
         if self._indicator is None:
             self._indicator = QFrame(fixedHeight=3)
@@ -1185,14 +1184,14 @@ class FloatWindow(QWidget):
         if not container:
             self.refresh()
             return
-        lay = container.layout()
+        lay = self.reminder_lay if key == "reminder" else container.layout()
         rows = [lay.itemAt(i).widget() for i in range(lay.count())
-                if isinstance(lay.itemAt(i).widget(), ItemRow)]
+                if isinstance(lay.itemAt(i).widget(), (ItemRow, ReminderChip))]
         itype = row.item["type"]
         if itype == "todo":
             group = [r.item for r in rows
                      if r.item["type"] == "todo" and not r.item.get("done")]
-        elif itype in ("recur", "link"):
+        elif itype in ("recur", "link", "remind"):
             group = [r.item for r in rows if r.item["type"] == itype]
         else:
             self.refresh()
@@ -1218,6 +1217,8 @@ class FloatWindow(QWidget):
         self.refresh()
 
     def _find_group_container(self, key):
+        if key == "reminder":
+            return self.reminder_panel
         for i in range(self.content_lay.count()):
             w = self.content_lay.itemAt(i).widget()
             if not w:

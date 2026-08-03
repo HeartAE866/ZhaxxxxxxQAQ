@@ -35,14 +35,22 @@ CHANGELOGS = {
               "· ⌨ 全局快捷键改为键盘钩子：替代 50ms 轮询，待机 CPU 占用实测为 0%\n"
               "· 🐛 修复：更新检查实际不可用（缺少 OpenSSL 运行库导致 https 失效），现已恢复\n"
               "· 🐛 修复：启动器（.bat/.vbs）找不到运行环境的问题\n"
-              "· 🧹 清理无用依赖：安装包体积进一步精简",
+              "· 🧹 清理无用依赖：安装包体积进一步精简\n"
+              "· 🔗 新增网址直达：行首自定义颜色色条、🌐 一键打开（无协议自动补全 https://）\n"
+              "· 🖱 设置栏滚轮防误触：滑条/下拉框滚动不再误改数值\n"
+              "· ↔ 提醒、循环任务、网址直达均支持自由拖拽排序（持久保存）\n"
+              "· 🐛 修复：内容超高时窗口最高可能超出屏幕底部（按窗口位置收紧上限）",
         "en": "⚡ Deep performance & desktop UX polish:\n"
               "· 🖱 Desktop embedding upgraded: the widget now lives in the desktop icon layer and is fully clickable\n"
               "· 🔧 Auto-recovery after Explorer crashes: position preserved, no restart needed\n"
               "· ⌨ Global hotkeys via keyboard hook: replaces 50ms polling, idle CPU measured at 0%\n"
               "· 🐛 Fixed: update check was actually broken (missing OpenSSL DLLs), now restored\n"
               "· 🐛 Fixed: launchers (.bat/.vbs) failing to find the runtime\n"
-              "· 🧹 Removed unused dependencies: smaller package",
+              "· 🧹 Removed unused dependencies: smaller package\n"
+              "· 🔗 New Quick Link type: custom color strip, one-click open (auto https://)\n"
+              "· 🖱 Wheel guard in Settings: sliders/dropdowns no longer change values on scroll\n"
+              "· ↔ Reminders, recurring tasks & quick links all support free drag-sorting (persisted)\n"
+              "· 🐛 Fixed: window could extend below the screen when content is too tall",
     },
     "1.2.1": {
         "zh": "🇨🇳 国内镜像与多项修复：\n"
