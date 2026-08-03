@@ -10,8 +10,9 @@ from datetime import date, datetime, timedelta
 
 from PySide6.QtCore import QEvent, QRect, Qt, QTimer
 from PySide6.QtGui import QCursor, QFont, QGuiApplication
-from PySide6.QtWidgets import (QFrame, QHBoxLayout, QLabel, QLineEdit,
-                               QPushButton, QScrollArea, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QApplication, QFrame, QHBoxLayout, QLabel,
+                               QLineEdit, QPushButton, QScrollArea, QVBoxLayout,
+                               QWidget)
 
 import core
 import theme as theme_mod
@@ -393,12 +394,12 @@ class FloatWindow(QWidget):
         self.clock_off_lbl.setAttribute(Qt.WA_TransparentForMouseEvents, True)
         self.clock_off_lbl.setStyleSheet(
             f"font-size:10pt;font-weight:bold;color:{self.t['text']};")
-        self.clock_time_lbl.setVisible(self._show_clock)
-        self.clock_date_lbl.setVisible(self._show_clock)
-        self.clock_off_lbl.setVisible(self._offwork_on)
         cp_lay.addWidget(self.clock_time_lbl)
         cp_lay.addWidget(self.clock_date_lbl)
         cp_lay.addWidget(self.clock_off_lbl)
+        self.clock_time_lbl.setVisible(self._show_clock)
+        self.clock_date_lbl.setVisible(self._show_clock)
+        self.clock_off_lbl.setVisible(self._offwork_on)
         self.clock_panel.setVisible(self._show_clock or self._offwork_on)
         self.clock_panel.setMouseTracking(True)
         self.clock_panel.installEventFilter(self)
@@ -1019,12 +1020,12 @@ class FloatWindow(QWidget):
                     row = ItemRow(self, it, mkey)
                     self._rows.append(row)
                     mlay.addWidget(row)
-                mcont.setVisible(m_open)
                 mcont.setProperty("group_key", mkey)
                 ylay.addWidget(mcont)
-            ycont.setVisible(y_open)
+                mcont.setVisible(m_open)
             ycont.setProperty("group_key", ykey)
             self.content_lay.addWidget(ycont)
+            ycont.setVisible(y_open)
 
         # ------- 循环任务独立区
         if recurs:
@@ -1114,9 +1115,9 @@ class FloatWindow(QWidget):
             row = ItemRow(self, it, key)
             self._rows.append(row)
             lay.addWidget(row)
-        cont.setVisible(r_open)
         cont.setProperty("group_key", key)
         self.content_lay.addWidget(cont)
+        cont.setVisible(r_open)
 
     def _add_link_section(self, links):
         key = "link"
@@ -1134,9 +1135,9 @@ class FloatWindow(QWidget):
             row = ItemRow(self, it, key)
             self._rows.append(row)
             lay.addWidget(row)
-        cont.setVisible(l_open)
         cont.setProperty("group_key", key)
         self.content_lay.addWidget(cont)
+        cont.setVisible(l_open)
 
     def _manual_sorted(self, items):
         """已手动拖拽排序的按 order 在前，未排序的保持原时间序在后。"""
