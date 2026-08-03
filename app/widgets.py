@@ -633,9 +633,16 @@ class Toast(QWidget):
 
     @classmethod
     def show_text(cls, text: str, ms: int = 1800):
-        # 已按用户要求禁用：任何操作不再弹出 Toast 提示窗口（“幽灵窗口”）。
-        # 如需恢复，将此函数体改回原实现即可。
-        return
+        if cls._instance is None:
+            cls._instance = Toast()
+        inst = cls._instance
+        inst.label.setText(text)
+        inst.adjustSize()
+        scr = QGuiApplication.screenAt(QCursor.pos()) or QGuiApplication.primaryScreen()
+        g = scr.availableGeometry()
+        inst.move(g.right() - inst.width() - 24, g.top() + 24)
+        inst.show()
+        inst._timer.start(ms)
 
 
 # ---------------------------------------------------------------- 确认对话框（防误删）
