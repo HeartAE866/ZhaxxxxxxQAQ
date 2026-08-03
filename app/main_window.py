@@ -22,7 +22,8 @@ from widgets import (BgFrame, CompactIconButton,
                      set_click_through, set_window_z_order, apply_frosted,
                      embed_to_desktop_if_needed,
                      shell_tray_alive, unembed_from_desktop, apply_window_corners,
-                     embed_to_desktop_lively, unembed_from_desktop_lively)
+                     embed_to_desktop_lively, unembed_from_desktop_lively,
+                     manual_ulw_window)
 
 WEEKDAYS = ["一", "二", "三", "四", "五", "六", "日"]
 WEEKDAYS_EN = ["Monday", "Tuesday", "Wednesday", "Thursday",
@@ -576,6 +577,11 @@ class FloatWindow(QWidget):
             self._setup_wallpaper_lively()
         self.save_geometry()                 # 持久化位置，供崩溃重建后恢复
 
+    def _manual_ulw_once(self):
+        """手动 ULW 呈现兜底（500ms）。"""
+        if getattr(self, "_wallpaper", False):
+            manual_ulw_window(self)
+
     def _setup_wallpaper_lively(self):
         """壁纸模式（Lively Wallpaper 机制）：窗口保持 translucent
         (WS_EX_LAYERED + UpdateLayeredWindow 呈现)，SetParent 到 Progman
@@ -587,8 +593,19 @@ class FloatWindow(QWidget):
             if not embed_to_desktop_lively(self):
                 return
             self._wallpaper = True
+            h = self.windowHandle()
             log.info(f"壁纸模式已启用 (Lively 机制) geo=({self.x()},{self.y()} "
-                     f"{self.width()}x{self.height()})")
+                     f"{self.width()}x{self.height()}) "
+                     f"isTopLevel={h.isTopLevel() if h else None} "
+                     f"parent={type(h.parent()).__name__ if h and h.parent() else None} "
+                     f"isVisible={self.isVisible()} native={bool(self.winId())}")
+            # SetParent 后强制多次重绘，确保 Qt 重新 flush(ULW) 呈现
+            for delay in (50, 200, 600, 1500):
+                QTimer.singleShot(delay, self.update)
+            QTimer.singleShot(1000, self.repaint)
+            # 兜底：手动 UpdateLayeredWindow 呈现（Qt flush 失效时直接提交合成器）
+            self._ulw_timer = QTimer(self, timeout=self._manual_ulw_once, interval=500)
+            self._ulw_timer.start()
         except Exception:
             log.error("_setup_wallpaper_lively 异常:\n" + traceback.format_exc())
 

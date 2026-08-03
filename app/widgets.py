@@ -431,6 +431,103 @@ def unembed_from_desktop_lively(win: QWidget):
         pass
 
 
+class _BLENDFUNCTION(ctypes.Structure):
+    _fields_ = [("BlendOp", ctypes.c_ubyte), ("BlendFlags", ctypes.c_ubyte),
+                ("SourceConstantAlpha", ctypes.c_ubyte),
+                ("AlphaFormat", ctypes.c_ubyte)]
+
+
+def manual_ulw_window(win: QWidget) -> bool:
+    """手动 UpdateLayeredWindow 呈现：Qt 离屏渲染到 QPixmap → 提交到
+    layered 窗口表面（直接进 DWM 合成器，与父窗口/重定向无关）。
+    用于 SetParent 后 Qt 自身 flush 失效（内容不呈现）的兜底。"""
+    try:
+        w, h = win.width(), win.height()
+        if w <= 0 or h <= 0:
+            return False
+        from PySide6.QtGui import QImage, QPixmap
+        pix = QPixmap(w, h)
+        win.render(pix)
+        img = pix.toImage().convertToFormat(QImage.Format_ARGB32_Premultiplied)
+        raw = bytes(img.constBits())
+        buf = ctypes.create_string_buffer(raw, len(raw))
+        user32 = _user32()
+        gdi32 = ctypes.windll.gdi32
+        hwnd = wintypes.HWND(int(win.winId()))
+
+        class _BMIH(ctypes.Structure):
+            _fields_ = [
+                ("biSize", ctypes.c_uint32), ("biWidth", ctypes.c_int32),
+                ("biHeight", ctypes.c_int32), ("biPlanes", ctypes.c_uint16),
+                ("biBitCount", ctypes.c_uint16), ("biCompression", ctypes.c_uint32),
+                ("biSizeImage", ctypes.c_uint32), ("biXPelsPerMeter", ctypes.c_int32),
+                ("biYPelsPerMeter", ctypes.c_int32), ("biClrUsed", ctypes.c_uint32),
+                ("biClrImportant", ctypes.c_uint32)]
+
+        user32.GetDC.restype = ctypes.c_void_p
+        user32.GetDC.argtypes = [wintypes.HWND]
+        user32.ReleaseDC.restype = ctypes.c_int
+        user32.ReleaseDC.argtypes = [wintypes.HWND, ctypes.c_void_p]
+        gdi32.CreateCompatibleDC.restype = ctypes.c_void_p
+        gdi32.CreateCompatibleDC.argtypes = [ctypes.c_void_p]
+        gdi32.SelectObject.restype = ctypes.c_void_p
+        gdi32.SelectObject.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+        gdi32.DeleteObject.restype = ctypes.c_bool
+        gdi32.DeleteObject.argtypes = [ctypes.c_void_p]
+        gdi32.DeleteDC.restype = ctypes.c_bool
+        gdi32.DeleteDC.argtypes = [ctypes.c_void_p]
+        gdi32.CreateDIBSection.restype = ctypes.c_void_p
+        gdi32.CreateDIBSection.argtypes = [ctypes.c_void_p, ctypes.c_void_p,
+                                           ctypes.c_uint, ctypes.POINTER(ctypes.c_void_p),
+                                           ctypes.c_void_p, ctypes.c_uint]
+        gdi32.SetDIBits.restype = ctypes.c_int
+        gdi32.SetDIBits.argtypes = [ctypes.c_void_p, ctypes.c_void_p,
+                                    ctypes.c_uint, ctypes.c_uint, ctypes.c_void_p,
+                                    ctypes.c_void_p, ctypes.c_uint]
+        user32.UpdateLayeredWindow.restype = ctypes.c_bool
+        user32.UpdateLayeredWindow.argtypes = [
+            wintypes.HWND, ctypes.c_void_p,
+            ctypes.POINTER(wintypes.POINT), ctypes.POINTER(wintypes.SIZE),
+            ctypes.c_void_p, ctypes.POINTER(wintypes.POINT), ctypes.c_uint32,
+            ctypes.POINTER(_BLENDFUNCTION), ctypes.c_uint32]
+
+        hdc_screen = user32.GetDC(0)
+        hdc_mem = gdi32.CreateCompatibleDC(hdc_screen)
+        bi = _BMIH()
+        bi.biSize = ctypes.sizeof(_BMIH)
+        bi.biWidth = w
+        bi.biHeight = -h
+        bi.biPlanes = 1
+        bi.biBitCount = 32
+        bi.biCompression = 0
+        bmp = gdi32.CreateDIBSection(hdc_mem, ctypes.byref(bi), 0, None, None, 0)
+        if not bmp:
+            gdi32.DeleteDC(hdc_mem)
+            user32.ReleaseDC(0, hdc_screen)
+            return False
+        gdi32.SetDIBits(hdc_mem, bmp, 0, h, buf, ctypes.byref(bi), 0)
+        gdi32.SelectObject(hdc_mem, bmp)
+        r = wintypes.RECT()
+        user32.GetWindowRect(hwnd, ctypes.byref(r))
+        pt_dst = wintypes.POINT(r.left, r.top)
+        size = wintypes.SIZE(w, h)
+        pt_src = wintypes.POINT(0, 0)
+        blend = _BLENDFUNCTION(0, 0, 255, 1)  # AC_SRC_ALPHA
+        ok = user32.UpdateLayeredWindow(hwnd, hdc_screen, ctypes.byref(pt_dst),
+                                        ctypes.byref(size), hdc_mem,
+                                        ctypes.byref(pt_src), 0,
+                                        ctypes.byref(blend), 0x00000002)  # ULW_ALPHA
+        gdi32.DeleteObject(bmp)
+        gdi32.DeleteDC(hdc_mem)
+        user32.ReleaseDC(0, hdc_screen)
+        if not ok:
+            log.info(f"manual_ulw 失败 hwnd={int(hwnd)}")
+        return ok
+    except Exception:
+        log.error("manual_ulw_window 异常:\n" + traceback.format_exc())
+        return False
+
+
 # ---------------------------------------------------------------- 矢量图标按钮
 class _VectorButton(QPushButton):
     """用 QPainter 绘制矢量图标的按钮（比文本符号更清晰可缩放）。"""
