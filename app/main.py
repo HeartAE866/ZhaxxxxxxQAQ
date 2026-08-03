@@ -3,7 +3,6 @@
 待机时仅有一个 20s 定时器，CPU 占用接近 0。"""
 from __future__ import annotations
 
-import ctypes
 import os
 import shutil
 import subprocess
@@ -11,103 +10,19 @@ import sys
 import traceback
 from datetime import timedelta
 
-from PySide6.QtCore import QEasingCurve, QLockFile, QObject, QPropertyAnimation, Qt, QTimer, Signal
-from PySide6.QtGui import QCursor, QGuiApplication, QIcon, QPixmap
-from PySide6.QtWidgets import (QApplication, QDialog, QFrame, QLabel,
-                               QSystemTrayIcon, QVBoxLayout, QWidget)
+from PySide6.QtCore import QLockFile, QObject, Qt, QTimer
+from PySide6.QtGui import QCursor, QGuiApplication, QIcon
+from PySide6.QtWidgets import (QApplication, QDialog, QSystemTrayIcon)
 
 import core
 import i18n
 import theme as theme_mod
-import updater
 from core import log
 from i18n import tr
-from editor import DetailDialog, ItemEditDialog, ReminderDialog, ReminderEditDialog
+from hotkeys import HotkeyPoller
 from main_window import FloatWindow
-from settings import SettingsWindow
-from widgets import (Toast, VK_MAP, HotkeyEdit, ConfirmDialog, apply_frosted,
-                     set_click_through, styled_menu, rounded_pixmap)
-
-
-class StartupSplash(QWidget):
-    """应用启动动画：圆角图标 + 应用名，淡入停留淡出，约 1.5 秒，丝滑连贯。"""
-
-    def __init__(self, t: dict):
-        super().__init__()
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Tool |
-                            Qt.WindowStaysOnTopHint)
-        self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setAttribute(Qt.WA_ShowWithoutActivating)
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
-        panel = QFrame(objectName="FrostedPanel")
-        outer.addWidget(panel)
-        lay = QVBoxLayout(panel)
-        lay.setContentsMargins(32, 28, 32, 28)
-        lay.setSpacing(12)
-        if os.path.exists(core.TRAY_ICON_PATH):
-            pm = QPixmap(core.TRAY_ICON_PATH).scaledToWidth(120, Qt.SmoothTransformation)
-            img = QLabel(alignment=Qt.AlignCenter)
-            img.setPixmap(rounded_pixmap(pm, 0.18))
-            lay.addWidget(img)
-        name = QLabel(core.APP_NAME, alignment=Qt.AlignCenter)
-        name.setStyleSheet(
-            f"font-size:16pt;font-weight:bold;color:{t['accent']};letter-spacing:2px;")
-        lay.addWidget(name)
-        sub = QLabel(tr("轻量桌面工作记事录"), alignment=Qt.AlignCenter)
-        sub.setStyleSheet(f"font-size:9pt;color:{t.get('done_text', '#888')};")
-        lay.addWidget(sub)
-        self.adjustSize()
-        scr = QGuiApplication.primaryScreen().availableGeometry()
-        self.move(scr.center().x() - self.width() // 2,
-                  scr.center().y() - self.height() // 2)
-        self.setWindowOpacity(0.0)
-
-    def play(self):
-        self.show()
-        anim = QPropertyAnimation(self, b"windowOpacity", self)
-        anim.setDuration(3500)
-        anim.setStartValue(0.0)
-        anim.setKeyValueAt(0.25, 1.0)
-        anim.setKeyValueAt(0.78, 1.0)
-        anim.setEndValue(0.0)
-        anim.setEasingCurve(QEasingCurve.InOutCubic)
-        anim.finished.connect(self.deleteLater)
-        self._anim = anim
-        anim.start()
-
-class HotkeyPoller(QObject):
-    """全局快捷键：以 50ms 轮询 GetAsyncKeyState 实现，支持任意多键组合
-    （如 Ctrl+Shift+Z+X）。不安装键盘钩子，完全不干扰系统输入与中文 IME。"""
-    fired = Signal(str)
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.combos: dict[str, tuple] = {}     # action -> (VK码组, ...)
-        self._down: set[str] = set()
-        self._timer = QTimer(self, interval=50, timeout=self._poll)
-        self._timer.start()
-
-    def _poll(self):
-        try:
-            # 正在快捷键捕获框录入时不触发
-            if isinstance(QApplication.focusWidget(), HotkeyEdit):
-                self._down.clear()
-                return
-            u32 = ctypes.windll.user32
-            for action, groups in self.combos.items():
-                if not groups:
-                    continue
-                pressed = all(
-                    any(u32.GetAsyncKeyState(vk) & 0x8000 for vk in g)
-                    for g in groups)
-                if pressed and action not in self._down:
-                    self._down.add(action)
-                    self.fired.emit(action)
-                elif not pressed:
-                    self._down.discard(action)
-        except Exception:
-            pass
+from widgets import (Toast, VK_MAP, ConfirmDialog, apply_frosted,
+                     set_click_through, styled_menu)
 
 
 class App(QObject):
@@ -132,11 +47,10 @@ class App(QObject):
 
         self.snoozed: dict[str, object] = {}
         self._reminder_dialogs: list = []
-        self.settings_win: SettingsWindow | None = None
+        self.settings_win: object | None = None
         self._update_nagged = False
         self._update_check_manual = False
-        self.update_checker = updater.UpdateCheck()
-        self.update_checker.result.connect(self._update_result)
+        self.update_checker = None
 
         self.win = FloatWindow(self)
         self._build_tray()
@@ -161,6 +75,7 @@ class App(QObject):
 
     # ---------------------------------------------------------------- 更新日志
     def _maybe_show_changelog(self):
+        import updater
         last = self.config.get("update", "last_seen_changelog", default="")
         if last == core.APP_VERSION:
             return
@@ -187,9 +102,14 @@ class App(QObject):
         self._update_check_manual = manual
         if manual:
             Toast.show_text(tr("正在检查更新…"))
+        if self.update_checker is None:
+            import updater
+            self.update_checker = updater.UpdateCheck()
+            self.update_checker.result.connect(self._update_result)
         self.update_checker.run()
 
     def _update_result(self, res):
+        import updater
         if not res:
             if self._update_check_manual:
                 Toast.show_text(tr("已是最新版本"))
@@ -255,7 +175,9 @@ class App(QObject):
     def toggle_visible(self):
         if self.win.isVisible():
             self.win.hide()
+            self.win.set_user_hidden(True)
         else:
+            self.win.set_user_hidden(False)
             self.win.show()
             if not self.config.get("window", "topmost"):
                 self.win.raise_()
@@ -298,17 +220,21 @@ class App(QObject):
             lambda: self.quick_record(True))
         m.addAction(tr("🔁 添加循环任务")).triggered.connect(
             lambda: self.add_item("recur"))
+        m.addAction(tr("🔗 添加网址直达")).triggered.connect(
+            lambda: self.add_item("link"))
         m.addAction(tr("⏰ 添加提醒")).triggered.connect(
             lambda: self.add_reminder())
         m.exec(QCursor.pos())
 
     def add_reminder(self):
         """添加一次性提醒（仅名称 + 时间，不绑定文件夹）。"""
+        from editor import ReminderEditDialog
         d = ReminderEditDialog(self.win, self.t)
         d.saved.connect(self._commit_new_item)
         d.show()
 
     def edit_reminder(self, item: dict):
+        from editor import ReminderEditDialog
         d = ReminderEditDialog(self.win, self.t, item)
         d.saved.connect(self._commit_edit_item)
         d.show()
@@ -339,12 +265,14 @@ class App(QObject):
             self.win.refresh()
 
     def quick_record(self, custom_time: bool):
+        from editor import ItemEditDialog
         d = ItemEditDialog(self.win, self.t, "record",
                            record_now=not custom_time, config=self.config)
         d.saved.connect(self._commit_new_item)
         d.show()
 
     def add_item(self, item_type: str):
+        from editor import ItemEditDialog
         d = ItemEditDialog(self.win, self.t, item_type, config=self.config)
         d.saved.connect(self._commit_new_item)
         d.show()
@@ -357,6 +285,7 @@ class App(QObject):
         Toast.show_text(tr("已添加：{title}").replace("{title}", it["title"]))
 
     def edit_item(self, item: dict):
+        from editor import ItemEditDialog
         d = ItemEditDialog(self.win, self.t, item["type"], item, config=self.config)
         d.saved.connect(self._commit_edit_item)
         d.show()
@@ -366,6 +295,7 @@ class App(QObject):
         self.win.refresh()
 
     def show_detail(self, item: dict):
+        from editor import DetailDialog
         self.win.highlight_id = None
         d = DetailDialog(self.win, self.t, self.store, item, self.config)
         d.changed.connect(self.win.refresh)
@@ -381,11 +311,15 @@ class App(QObject):
         if item["type"] == "recur" and core.pending_instance(item):
             m.addAction(tr("✔ 完成当期")).triggered.connect(
                 lambda: self._complete_instance(item))
+        if item["type"] == "link":
+            m.addAction(tr("🌐 打开网址")).triggered.connect(
+                lambda: self.open_link(item))
         m.addSeparator()
         m.addAction(tr("🗑 删除")).triggered.connect(
             lambda: self.delete_item(item))
-        m.addAction(tr("📂 打开工作目录")).triggered.connect(
-            lambda: self.open_folder_flow(item))
+        if item["type"] != "link":
+            m.addAction(tr("📂 打开工作目录")).triggered.connect(
+                lambda: self.open_folder_flow(item))
         m.exec(gpos)
 
     def delete_item(self, item: dict):
@@ -429,6 +363,9 @@ class App(QObject):
             self.win.refresh()
             Toast.show_text(tr("已完成当期：{title}").replace("{title}", item["title"]))
 
+    def open_link(self, item: dict):
+        core.open_url(item.get("url"))
+
     def open_folder_flow(self, item: dict):
         folder = item.get("folder")
         if not folder or not os.path.isdir(folder):
@@ -443,6 +380,7 @@ class App(QObject):
 
     # ---------------------------------------------------------------- 设置 / 主题
     def show_settings(self):
+        from settings import SettingsWindow
         if self.settings_win is None:
             self.settings_win = SettingsWindow(self)
             self.settings_win.finished.connect(self._settings_closed)
@@ -561,6 +499,7 @@ class App(QObject):
             .replace("{mins}", str(mins)).replace("{deadline}", it['deadline'])
 
     def _fire_reminder(self, item, message):
+        from editor import ReminderDialog
         log.info(f"提醒: {item['title']} - {message}")
         self.win.highlight_id = item["id"]
         self.win.refresh()
@@ -584,14 +523,15 @@ class App(QObject):
 
     def _reminder_done(self, item, act: str, mins: int):
         if item["type"] == "remind":
-            key = item.get("remind_time")
             if act == "done":
                 item["done"] = True
+                item["notified_for"] = item.get("remind_time")
                 log.info(f"提醒中完成: {item['title']}")
             elif act == "snooze":
                 self.snoozed[item["id"]] = core.now() + timedelta(minutes=mins)
                 log.info(f"稍后提醒({mins}分钟): {item['title']}")
-            item["notified_for"] = key
+            else:  # close：本次提醒已处理，不再重复弹出
+                item["notified_for"] = item.get("remind_time")
             self.store.save()
             self.win.highlight_id = None
             self.win.refresh()
@@ -637,6 +577,10 @@ class App(QObject):
                 pass
         finally:
             try:
+                self.hk.shutdown()
+            except Exception:
+                pass
+            try:
                 self.tray.hide()
             except Exception:
                 pass
@@ -662,7 +606,6 @@ class App(QObject):
 
     def run(self):
         Toast.show_text(tr("ZhaxxxxxxQAQ 已在桌面运行"))
-        StartupSplash(self.t).play()
         sys.exit(self.qapp.exec())
 
 

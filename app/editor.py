@@ -6,12 +6,13 @@ import os
 from datetime import datetime, timedelta
 
 from PySide6.QtCore import QDateTime, Qt, Signal
-from PySide6.QtWidgets import (QCheckBox, QComboBox, QDateTimeEdit,
+from PySide6.QtGui import QColor
+from PySide6.QtWidgets import (QCheckBox, QComboBox, QDateTimeEdit, QDialog,
                                QFileDialog, QHBoxLayout, QLabel, QLineEdit,
                                QListWidget, QPushButton, QWidget)
 import core
-from i18n import tr
-from widgets import FramelessDialog
+from i18n import tr, current_lang
+from widgets import FramelessDialog, ColorDialog
 
 ADVANCE_OPTIONS = [("截止时提醒", 0), ("提前5分钟", 5), ("提前15分钟", 15),
                    ("提前30分钟", 30), ("提前1小时", 60), ("提前1天", 1440),
@@ -77,16 +78,35 @@ class ItemEditDialog(FramelessDialog):
             self.body.addWidget(self.time_custom)
             self.body.addLayout(_form_row("时间", self.record_time))
 
-        # ---- 优先级（默认自动，可手动选择）
-        self.priority = QComboBox()
-        self.priority.addItem(tr("自动（推荐）"), "auto")
-        for k in ("high", "mid", "low"):
-            self.priority.addItem(core.priority_name(k), k)
-        cur = (item or {}).get("priority")
-        idx = self.priority.findData(cur if cur in ("high", "mid", "low") else "auto")
-        self.priority.setCurrentIndex(max(0, idx))
-        self.priority.setToolTip(tr("自动：已完成→低；剩余两天以内→高；其他→中"))
-        self.body.addLayout(_form_row("优先级", self.priority))
+        # ---- 网址直达：网址 + 名称前竖条颜色
+        if item_type == "link":
+            self.url_edit = QLineEdit((item or {}).get("url") or "")
+            self.url_edit.setPlaceholderText("https://…")
+            self.body.addLayout(_form_row("网址", self.url_edit))
+
+            crow = QHBoxLayout()
+            lbl_color = QLabel(tr("名称前竖条颜色"))
+            lbl_color.setFixedWidth(64)
+            crow.addWidget(lbl_color)
+            self.bar_color = (item or {}).get("bar_color") or t["accent"]
+            self.color_btn = QPushButton(fixedWidth=64, fixedHeight=26)
+            self.color_btn.clicked.connect(self._pick_bar_color)
+            self._update_color_btn()
+            crow.addWidget(self.color_btn)
+            crow.addStretch()
+            self.body.addLayout(crow)
+
+        # ---- 优先级（默认自动，可手动选择；网址直达不需要）
+        if item_type != "link":
+            self.priority = QComboBox()
+            self.priority.addItem(tr("自动（推荐）"), "auto")
+            for k in ("high", "mid", "low"):
+                self.priority.addItem(core.priority_name(k), k)
+            cur = (item or {}).get("priority")
+            idx = self.priority.findData(cur if cur in ("high", "mid", "low") else "auto")
+            self.priority.setCurrentIndex(max(0, idx))
+            self.priority.setToolTip(tr("自动：已完成→低；剩余两天以内→高；其他→中"))
+            self.body.addLayout(_form_row("优先级", self.priority))
 
         # ---- 待办：截止时间 + 提前提醒
         if item_type == "todo":
@@ -149,7 +169,7 @@ class ItemEditDialog(FramelessDialog):
             wl.setContentsMargins(0, 0, 0, 0)
             self.weekday = QComboBox()
             wd_items = (("Mon", 0), ("Tue", 1), ("Wed", 2), ("Thu", 3),
-                        ("Fri", 4), ("Sat", 5), ("Sun", 6)) if tr("星期") != "星期" \
+                        ("Fri", 4), ("Sat", 5), ("Sun", 6)) if current_lang() == "en" \
                 else (("星期一", 0), ("星期二", 1), ("星期三", 2), ("星期四", 3),
                       ("星期五", 4), ("星期六", 5), ("星期日", 6))
             for text, i in wd_items:
@@ -198,48 +218,50 @@ class ItemEditDialog(FramelessDialog):
         self.body.addLayout(_form_row("标签", self.tags_edit))
 
         # ---- 文件夹绑定（可选用任意一条平行生成规则，规则在 设置→文件夹 中自定义）
-        self.folder_mode = QComboBox()
-        existing_folder = (item or {}).get("folder")
-        if existing_folder:
-            short = existing_folder if len(existing_folder) <= 34 \
-                else "…" + existing_folder[-33:]
-            self.folder_mode.addItem(
-                tr("保持绑定：{path}").replace("{path}", short), "keep")
-        base = (self.config.get("base_folder") if self.config else None) \
-            or core.DEFAULT_BASE_FOLDER
-        rules_list = core.folder_rules_list(
-            self.config.get("folder_rules", default={}) if self.config else {})
-        for i, rule in enumerate(rules_list):
-            name = rule.get("name") or f"规则{i + 1}"
-            self.folder_mode.addItem(
-                tr("按规则「{name}」创建").replace("{name}", name), f"rule:{i}")
-        for name in ((self.config.get("custom_folders") if self.config else None) or []):
-            self.folder_mode.addItem(f"📂 {name}", core.custom_folder_path(base, name))
-        self.folder_mode.addItem(tr("自定义选择文件夹…"), "manual")
-        if existing_folder:
-            self.folder_mode.setCurrentIndex(0)          # 保持绑定
-        else:
-            self.folder_mode.setCurrentIndex(
-                self.folder_mode.findData("rule:0"))      # 默认第一条生成规则
-        self.body.addLayout(_form_row("文件夹", self.folder_mode))
+        # 网址直达不需要文件夹绑定
+        if item_type != "link":
+            self.folder_mode = QComboBox()
+            existing_folder = (item or {}).get("folder")
+            if existing_folder:
+                short = existing_folder if len(existing_folder) <= 34 \
+                    else "…" + existing_folder[-33:]
+                self.folder_mode.addItem(
+                    tr("保持绑定：{path}").replace("{path}", short), "keep")
+            base = (self.config.get("base_folder") if self.config else None) \
+                or core.DEFAULT_BASE_FOLDER
+            rules_list = core.folder_rules_list(
+                self.config.get("folder_rules", default={}) if self.config else {})
+            for i, rule in enumerate(rules_list):
+                name = rule.get("name") or f"规则{i + 1}"
+                self.folder_mode.addItem(
+                    tr("按规则「{name}」创建").replace("{name}", name), f"rule:{i}")
+            for name in ((self.config.get("custom_folders") if self.config else None) or []):
+                self.folder_mode.addItem(f"📂 {name}", core.custom_folder_path(base, name))
+            self.folder_mode.addItem(tr("自定义选择文件夹…"), "manual")
+            if existing_folder:
+                self.folder_mode.setCurrentIndex(0)          # 保持绑定
+            else:
+                self.folder_mode.setCurrentIndex(
+                    self.folder_mode.findData("rule:0"))      # 默认第一条生成规则
+            self.body.addLayout(_form_row("文件夹", self.folder_mode))
 
-        self.folder_row = QWidget()
-        fl = QHBoxLayout(self.folder_row)
-        fl.setContentsMargins(0, 0, 0, 0)
-        self.folder_edit = QLineEdit(placeholderText=tr("选择要绑定的已有文件夹"))
-        btn_browse = QPushButton(tr("浏览…"), fixedWidth=64)
+            self.folder_row = QWidget()
+            fl = QHBoxLayout(self.folder_row)
+            fl.setContentsMargins(0, 0, 0, 0)
+            self.folder_edit = QLineEdit(placeholderText=tr("选择要绑定的已有文件夹"))
+            btn_browse = QPushButton(tr("浏览…"), fixedWidth=64)
 
-        def _browse():
-            d = QFileDialog.getExistingDirectory(self, tr("选择要绑定的文件夹"))
-            if d:
-                self.folder_edit.setText(d)
-        btn_browse.clicked.connect(_browse)
-        fl.addWidget(self.folder_edit, 1)
-        fl.addWidget(btn_browse)
-        self.folder_row.setVisible(False)
-        self.folder_mode.currentIndexChanged.connect(
-            lambda _: self._folder_mode_changed())
-        self.body.addWidget(self.folder_row)
+            def _browse():
+                d = QFileDialog.getExistingDirectory(self, tr("选择要绑定的文件夹"))
+                if d:
+                    self.folder_edit.setText(d)
+            btn_browse.clicked.connect(_browse)
+            fl.addWidget(self.folder_edit, 1)
+            fl.addWidget(btn_browse)
+            self.folder_row.setVisible(False)
+            self.folder_mode.currentIndexChanged.connect(
+                lambda _: self._folder_mode_changed())
+            self.body.addWidget(self.folder_row)
 
         # ---- 按钮
         row = QHBoxLayout()
@@ -257,6 +279,17 @@ class ItemEditDialog(FramelessDialog):
     def _folder_mode_changed(self):
         self.folder_row.setVisible(self.folder_mode.currentData() == "manual")
         self.adjustSize()
+
+    def _update_color_btn(self):
+        self.color_btn.setStyleSheet(
+            f"background-color:{self.bar_color};"
+            f"border:1px solid rgba(128,128,128,120);border-radius:4px;")
+
+    def _pick_bar_color(self):
+        d = ColorDialog(self, self.t, QColor(self.bar_color), with_alpha=False)
+        if d.exec() == QDialog.Accepted:
+            self.bar_color = d.color.name(QColor.HexArgb).upper()
+            self._update_color_btn()
 
     def _period_changed(self):
         p = self.period.currentData()
@@ -285,22 +318,27 @@ class ItemEditDialog(FramelessDialog):
                 it["created"] = core.dt_str(qdt.replace(second=0, microsecond=0))
             elif self.item is None:
                 it["created"] = core.dt_str(core.now())
-        # 文件夹绑定方式（默认按所选生成规则，规则在 设置→文件夹 中自定义）
-        fmode = self.folder_mode.currentData()
-        if fmode == "manual":
-            p = self.folder_edit.text().strip()
-            it["folder"] = p if p else None
-        elif isinstance(fmode, str) and fmode.startswith("rule:"):
-            rules_list = core.folder_rules_list(
-                self.config.get("folder_rules", default={}) if self.config else {})
-            idx = int(fmode.split(":", 1)[1])
-            idx = idx if idx < len(rules_list) else 0
-            it["folder"] = None
-            it["folder_rule"] = rules_list[idx].get("name") or None
-        elif fmode == "keep":
-            pass                                       # 保持原绑定不变
-        else:
-            it["folder"] = fmode                       # 自定义子文件夹完整路径
+        if self.item_type == "link":
+            it["url"] = self.url_edit.text().strip()
+            it["bar_color"] = self.bar_color
+            it["priority"] = "mid"
+        if self.item_type != "link":
+            # 文件夹绑定方式（默认按所选生成规则，规则在 设置→文件夹 中自定义）
+            fmode = self.folder_mode.currentData()
+            if fmode == "manual":
+                p = self.folder_edit.text().strip()
+                it["folder"] = p if p else None
+            elif isinstance(fmode, str) and fmode.startswith("rule:"):
+                rules_list = core.folder_rules_list(
+                    self.config.get("folder_rules", default={}) if self.config else {})
+                idx = int(fmode.split(":", 1)[1])
+                idx = idx if idx < len(rules_list) else 0
+                it["folder"] = None
+                it["folder_rule"] = rules_list[idx].get("name") or None
+            elif fmode == "keep":
+                pass                                   # 保持原绑定不变
+            else:
+                it["folder"] = fmode                   # 自定义子文件夹完整路径
         if self.item_type == "todo":
             if self.has_deadline.isChecked():
                 qdt = self.deadline.dateTime().toPython()
@@ -321,8 +359,9 @@ class ItemEditDialog(FramelessDialog):
                 r["month"] = int(self.month.currentText())
                 r["monthday"] = int(self.monthday.currentText())
             it["recur"] = r
-        p = self.priority.currentData()
-        it["priority"] = core.auto_priority(it) if p == "auto" else p
+        if self.item_type != "link":
+            p = self.priority.currentData()
+            it["priority"] = core.auto_priority(it) if p == "auto" else p
         self.result_item = it
         self.saved.emit(it)
         self.accept()
@@ -462,6 +501,14 @@ class DetailDialog(FramelessDialog):
                     lw.addItem(h)
                 self.body.addWidget(lw)
 
+        if it["type"] == "link":
+            self.body.addWidget(QLabel(
+                tr("网址：{u}").replace("{u}", it.get("url") or "-")))
+            btn_open = QPushButton(tr("🌐 打开网址"), objectName="AccentButton")
+            btn_open.clicked.connect(
+                lambda: core.open_url(it.get("url")))
+            self.body.addWidget(btn_open)
+
         # 标签
         row = QHBoxLayout()
         row.addWidget(QLabel(tr("标签")))
@@ -470,24 +517,25 @@ class DetailDialog(FramelessDialog):
         row.addWidget(self.tags_edit, 1)
         self.body.addLayout(row)
 
-        # 文件夹
-        folder = it.get("folder")
-        self.folder_lbl = QLabel(folder or tr("未绑定文件夹"), wordWrap=True)
-        if folder:
-            self.folder_lbl.setStyleSheet(f"color:{self.t['accent']};")
-        self.body.addWidget(self.folder_lbl)
-        frow = QHBoxLayout()
-        btn_open = QPushButton(tr("📂 打开/创建"))
-        btn_open.clicked.connect(self._open_folder)
-        btn_bind = QPushButton(tr("重新绑定"))
-        btn_bind.clicked.connect(self._rebind)
-        btn_unbind = QPushButton(tr("解除绑定"))
-        btn_unbind.clicked.connect(self._unbind)
-        frow.addWidget(btn_open)
-        frow.addWidget(btn_bind)
-        frow.addWidget(btn_unbind)
-        frow.addStretch()
-        self.body.addLayout(frow)
+        # 文件夹（网址直达不需要）
+        if it["type"] != "link":
+            folder = it.get("folder")
+            self.folder_lbl = QLabel(folder or tr("未绑定文件夹"), wordWrap=True)
+            if folder:
+                self.folder_lbl.setStyleSheet(f"color:{self.t['accent']};")
+            self.body.addWidget(self.folder_lbl)
+            frow = QHBoxLayout()
+            btn_open = QPushButton(tr("📂 打开/创建"))
+            btn_open.clicked.connect(self._open_folder)
+            btn_bind = QPushButton(tr("重新绑定"))
+            btn_bind.clicked.connect(self._rebind)
+            btn_unbind = QPushButton(tr("解除绑定"))
+            btn_unbind.clicked.connect(self._unbind)
+            frow.addWidget(btn_open)
+            frow.addWidget(btn_bind)
+            frow.addWidget(btn_unbind)
+            frow.addStretch()
+            self.body.addLayout(frow)
 
         brow = QHBoxLayout()
         btn_edit = QPushButton(tr("✏ 编辑"), objectName="AccentButton")

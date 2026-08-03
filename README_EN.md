@@ -3,7 +3,7 @@
 A frameless, frosted-glass floating widget that sits on your desktop: work logs, todos, recurring tasks, reminders, and an off-work countdown.
 **100% local and offline** — all data stays in the app folder. No accounts, no cloud, no tracking.
 
-![Version](https://img.shields.io/badge/version-v1.2.1-blue)
+![Version](https://img.shields.io/badge/version-v1.3.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Python](https://img.shields.io/badge/Python-3.14+-8A2BE2)
 ![PySide6](https://img.shields.io/badge/UI-PySide6-4fc3f7)
@@ -47,7 +47,7 @@ A frameless, frosted-glass floating widget that sits on your desktop: work logs,
 ## Install
 
 Download the latest installer from [Releases](https://github.com/HeartAE866/ZhaxxxxxxQAQ/releases)
-(`ZhaxxxxxxQAQ_Setup_v1.2.1.exe`) and run it.
+(`ZhaxxxxxxQAQ_Setup_v1.3.0.exe`) and run it.
 
 **For users in China**: if GitHub is slow or unreachable, use the domestic mirror repository
 [Gitee Mirror](https://gitee.com/HeartAE86/ZhaxxxxxxQAQ) (search "Gitee ZhaxxxxxxQAQ" to find it);

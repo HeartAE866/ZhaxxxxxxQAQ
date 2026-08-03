@@ -1,7 +1,7 @@
 {
-  "tag": "v1.2.1",
-  "name": "ZhaxxxxxxQAQ_Setup_v1.2.1.exe",
-  "url": "https://github.com/HeartAE866/ZhaxxxxxxQAQ/releases/download/v1.2.1/ZhaxxxxxxQAQ_Setup_v1.2.1.exe",
-  "mirror_url": "https://ghfast.top/https://github.com/HeartAE866/ZhaxxxxxxQAQ/releases/download/v1.2.1/ZhaxxxxxxQAQ_Setup_v1.2.1.exe",
-  "body": "v1.2.1 新增国内镜像源：国内用户无需科学上网即可检查更新与下载安装包。"
+  "tag": "v1.3.0",
+  "name": "ZhaxxxxxxQAQ_Setup_v1.3.0.exe",
+  "url": "https://github.com/HeartAE866/ZhaxxxxxxQAQ/releases/download/v1.3.0/ZhaxxxxxxQAQ_Setup_v1.3.0.exe",
+  "mirror_url": "https://ghfast.top/https://github.com/HeartAE866/ZhaxxxxxxQAQ/releases/download/v1.3.0/ZhaxxxxxxQAQ_Setup_v1.3.0.exe",
+  "body": "v1.3.0 深度性能与桌面体验优化：挂件融入桌面图标层可点击、Explorer 崩溃自动恢复、快捷键改键盘钩子待机 0% CPU、修复更新检查不可用与启动器问题，安装包进一步精简。"
 }

@@ -28,6 +28,22 @@ TIMEOUT = 8
 
 # 各版本更新日志（zh / en），新版本发布时在此追加条目；弹窗展示最近三个版本
 CHANGELOGS = {
+    "1.3.0": {
+        "zh": "⚡ 深度性能与桌面体验优化：\n"
+              "· 🖱 桌面嵌入升级：挂件真正融入桌面图标层，可像普通窗口一样直接点击操作\n"
+              "· 🔧 Explorer 崩溃后挂件自动恢复：位置不漂移、无需重启软件\n"
+              "· ⌨ 全局快捷键改为键盘钩子：替代 50ms 轮询，待机 CPU 占用实测为 0%\n"
+              "· 🐛 修复：更新检查实际不可用（缺少 OpenSSL 运行库导致 https 失效），现已恢复\n"
+              "· 🐛 修复：启动器（.bat/.vbs）找不到运行环境的问题\n"
+              "· 🧹 清理无用依赖：安装包体积进一步精简",
+        "en": "⚡ Deep performance & desktop UX polish:\n"
+              "· 🖱 Desktop embedding upgraded: the widget now lives in the desktop icon layer and is fully clickable\n"
+              "· 🔧 Auto-recovery after Explorer crashes: position preserved, no restart needed\n"
+              "· ⌨ Global hotkeys via keyboard hook: replaces 50ms polling, idle CPU measured at 0%\n"
+              "· 🐛 Fixed: update check was actually broken (missing OpenSSL DLLs), now restored\n"
+              "· 🐛 Fixed: launchers (.bat/.vbs) failing to find the runtime\n"
+              "· 🧹 Removed unused dependencies: smaller package",
+    },
     "1.2.1": {
         "zh": "🇨🇳 国内镜像与多项修复：\n"
               "· 🔄 新增国内镜像源：GitHub 无法访问时自动切换（jsDelivr + ghfast 加速），无需科学上网即可更新\n"

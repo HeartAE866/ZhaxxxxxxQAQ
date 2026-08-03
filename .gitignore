@@ -24,3 +24,6 @@ AGENTS.md
 # 截图源文件（发布用副本在 docs/screenshots/）
 截屏*/
 jieping/
+
+# 版本存档（本地独立存档，不入 git）
+版本存档/

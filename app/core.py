@@ -12,6 +12,7 @@ import re
 import sys
 import traceback
 import uuid
+import webbrowser
 import winreg
 from datetime import datetime, timedelta
 
@@ -35,7 +36,7 @@ ICON_PATH = os.path.join(RES_DIR, "icon.jpg")
 LOGO_PATH = os.path.join(RES_DIR, "logo.png")
 VBS_PATH = os.path.join(ROOT, "ZhaxxxxxxQAQ.vbs")
 APP_NAME = "ZhaxxxxxxQAQ"
-APP_VERSION = "1.2.1"
+APP_VERSION = "1.3.0"
 RUN_REG_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 
 # 托盘图标：优先用户桌面上的 图标.png（按当前用户主目录推导，不硬编码个人路径），
@@ -67,6 +68,9 @@ def dt_str(dt: datetime) -> str:
 def parse_dt(s: str | None) -> datetime | None:
     if not s:
         return None
+    # 兼容 ISO 风格（T 分隔，如 2026-08-03T15:57），统一按空格格式解析
+    if "T" in s:
+        s = s.replace("T", " ")
     try:
         return datetime.strptime(s, FMT)
     except (ValueError, TypeError):
@@ -199,7 +203,7 @@ class Config:
 PRIORITIES = {"high": "高", "mid": "中", "low": "低"}
 PERIODS = {"day": "每天", "week": "每周", "month": "每月", "quarter": "每季", "year": "每年"}
 TYPE_NAMES = {"record": "工作记录", "todo": "待办事项", "recur": "循环任务",
-              "remind": "提醒"}
+              "remind": "提醒", "link": "网址直达"}
 
 
 def type_name(key: str) -> str:
@@ -245,8 +249,23 @@ def new_item(item_type: str, title: str, **kw) -> dict:
         "notified": False,
         "recur": kw.get("recur"),             # {"period","time","weekday","monthday","month"}
         "completed_instances": kw.get("completed_instances", []),  # recur 完成时间戳
+        "url": kw.get("url"),                 # link 用：直达网址
+        "bar_color": kw.get("bar_color"),     # link 用：名称前竖条颜色
     }
     return it
+
+
+def open_url(url: str):
+    """打开网址直达：无协议前缀自动补 https。"""
+    u = (url or "").strip()
+    if not u:
+        return
+    if "://" not in u:
+        u = "https://" + u
+    try:
+        webbrowser.open(u)
+    except Exception:
+        log.error(f"打开网址失败 {u}:\n" + traceback.format_exc())
 
 
 class DataStore:
@@ -586,7 +605,7 @@ CSV_FIELDS = ["id", "type", "title", "created", "deadline", "priority", "done",
               "tags", "folder", "folder_rule", "order", "remind_advance",
               "remind_time", "notified_for",
               "recur_period", "recur_time", "recur_weekday", "recur_monthday",
-              "recur_month", "completed_instances"]
+              "recur_month", "completed_instances", "url", "bar_color"]
 
 
 def _item_to_row(it: dict) -> dict:
@@ -603,6 +622,7 @@ def _item_to_row(it: dict) -> dict:
         "recur_weekday": r.get("weekday", ""), "recur_monthday": r.get("monthday", ""),
         "recur_month": r.get("month", ""),
         "completed_instances": ";".join(it.get("completed_instances", [])),
+        "url": it.get("url") or "", "bar_color": it.get("bar_color") or "",
     }
 
 
@@ -636,6 +656,7 @@ def _row_to_item(row: dict) -> dict:
         "notified": False,
         "recur": recur,
         "completed_instances": [t for t in (row.get("completed_instances") or "").split(";") if t],
+        "url": row.get("url") or None, "bar_color": row.get("bar_color") or None,
     }
 
 

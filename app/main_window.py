@@ -3,19 +3,24 @@
 折叠/展开、拖拽排序、搜索、边缘缩放、紧凑模式。"""
 from __future__ import annotations
 
+import ctypes
+import traceback
+from ctypes import wintypes
 from datetime import date, datetime, timedelta
 
 from PySide6.QtCore import QEvent, QRect, Qt, QTimer
-from PySide6.QtGui import QCursor, QFont
+from PySide6.QtGui import QCursor, QFont, QGuiApplication
 from PySide6.QtWidgets import (QFrame, QHBoxLayout, QLabel, QLineEdit,
-                               QPushButton, QVBoxLayout, QWidget)
+                               QPushButton, QScrollArea, QVBoxLayout, QWidget)
 
 import core
 import theme as theme_mod
+from core import log
 from i18n import tr, current_lang
 from widgets import (BgFrame, CompactIconButton,
                      set_click_through, set_window_z_order, apply_frosted,
-                     apply_window_corners)
+                     embed_to_desktop_if_needed,
+                     shell_tray_alive, unembed_from_desktop, apply_window_corners)
 
 WEEKDAYS = ["一", "二", "三", "四", "五", "六", "日"]
 WEEKDAYS_EN = ["Monday", "Tuesday", "Wednesday", "Thursday",
@@ -90,17 +95,24 @@ class ItemRow(QFrame):
         lay.setContentsMargins(2, 3, 4, 3)
         lay.setSpacing(4)
 
-        # 优先级色条
-        pcolor = t.get(item.get("priority", "mid"), t["mid"])
+        # 优先级色条（网址直达用自定义颜色）
+        if item["type"] == "link":
+            pcolor = item.get("bar_color") or t["accent"]
+        else:
+            pcolor = t.get(item.get("priority", "mid"), t["mid"])
         strip = QFrame(fixedWidth=4, fixedHeight=22)
         strip.setStyleSheet(f"background-color:{pcolor};border-radius:2px;")
-        pname = core.priority_name(item.get("priority", "mid"))
-        strip.setToolTip(f"Priority: {pname}" if current_lang() == "en"
-                         else f"优先级：{pname}")
+        if item["type"] == "link":
+            strip.setToolTip(item.get("url") or "")
+        else:
+            pname = core.priority_name(item.get("priority", "mid"))
+            strip.setToolTip(f"Priority: {pname}" if current_lang() == "en"
+                             else f"优先级：{pname}")
         lay.addWidget(strip, 0, Qt.AlignVCenter)
 
-        # 待办拖拽手柄
-        if item["type"] == "todo" and not item.get("done") and group_key:
+        # 待办拖拽手柄（待办/循环任务/网址直达 可手动排序）
+        if item["type"] in ("todo", "recur", "link") \
+                and not item.get("done") and group_key:
             lay.addWidget(DragHandle(self), 0, Qt.AlignVCenter)
 
         # 标题（删除线，超长自动换行）
@@ -122,16 +134,24 @@ class ItemRow(QFrame):
                              f"border-radius:6px;padding:0 5px;font-size:8pt;")
             lay.addWidget(tl, 0, Qt.AlignVCenter)
 
-        # 时间/状态
+        # 时间/状态（网址直达显示网址）
         self.time_lbl = QLabel(self.time_text())
         self.time_lbl.setStyleSheet(f"color:{t['done_text']};font-size:8.5pt;")
+        if item["type"] == "link":
+            self.time_lbl.setToolTip(item.get("url") or "")
         lay.addWidget(self.time_lbl, 0, Qt.AlignVCenter)
 
-        # 文件夹按钮
-        btn = QLabel("📁")
-        btn.setCursor(Qt.PointingHandCursor)
-        btn.setToolTip(tr("打开工作目录"))
-        btn.mousePressEvent = lambda e: win.app.open_folder_flow(self.item)
+        # 一键直达：网址直达 → 打开网站；其余 → 打开工作目录
+        if item["type"] == "link":
+            btn = QLabel("🌐")
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setToolTip(tr("打开网址"))
+            btn.mousePressEvent = lambda e: win.app.open_link(self.item)
+        else:
+            btn = QLabel("📁")
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setToolTip(tr("打开工作目录"))
+            btn.mousePressEvent = lambda e: win.app.open_folder_flow(self.item)
         lay.addWidget(btn, 0, Qt.AlignVCenter)
 
         self._apply_hover(False)
@@ -171,6 +191,11 @@ class ItemRow(QFrame):
                 if dl.date() == today:
                     return f"{tr('截止 ')}{dl.strftime('%H:%M')}"
                 return f"{tr('截止 ')}{dl.strftime('%m-%d %H:%M')}"
+        if it["type"] == "link":
+            u = (it.get("url") or "").strip()
+            if not u:
+                return ""
+            return u if len(u) <= 22 else u[:22] + "…"
         return ""
 
     def refresh_soft(self):
@@ -242,7 +267,8 @@ class GroupHeader(QFrame):
     def mousePressEvent(self, e):
         if e.button() == Qt.LeftButton:
             self.win.expanded[self.key] = not self.win.expanded.get(self.key, False)
-            self.win.refresh()
+            # 组头展开/收起：不重算窗口高度（保持用户调整过的长度，超高部分内容区滚动）
+            self.win.refresh(fit=False)
 
 
 # ---------------------------------------------------------------- 悬浮主窗
@@ -262,6 +288,8 @@ class FloatWindow(QWidget):
         self._compact_pressed = False
         self._compact_moved = False
         self._rows: list[ItemRow] = []
+        self._user_resized = False     # 用户手动缩放过窗口高度后，展开/收起不再重算高度
+        self._pre_compact_h = None     # 进入紧凑模式前的高度（退出时恢复，不覆盖用户调整）
         self.setWindowTitle(core.APP_NAME)
         self.setMinimumWidth(240)
         self._build_shell()
@@ -316,12 +344,19 @@ class FloatWindow(QWidget):
         self.reminder_panel.setVisible(False)
         self.main_lay.insertWidget(1, self.reminder_panel)
 
-        # 内容区：按 年→月 分组平铺，无滚动条，窗口高度随内容自适应
+        # 内容区：按 年→月 分组平铺；内容超高时滚动查看（滚轮，无滚动条）
+        self.scroll = QScrollArea()
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setFrameShape(QFrame.NoFrame)
+        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.scroll.viewport().setAutoFillBackground(False)
         self.content = BgFrame()
         self.content_lay = QVBoxLayout(self.content)
         self.content_lay.setContentsMargins(0, 0, 0, 0)
         self.content_lay.setSpacing(3)
-        self.main_lay.addWidget(self.content, 1)
+        self.scroll.setWidget(self.content)
+        self.main_lay.addWidget(self.scroll, 1)
 
         # 边缘缩放：面板/头部/时钟区/紧凑条都跟踪鼠标并安装事件过滤器
         self.panel.setMouseTracking(True)
@@ -381,9 +416,14 @@ class FloatWindow(QWidget):
         self._clock = QTimer(self, timeout=self._tick, interval=20000)
         self._clock.start()
         self._clock_timer = QTimer(self, timeout=self._update_clock, interval=1000)
-        self._clock_timer.start()
+        self._clock_timer.stop()   # 按需启停（_sync_clock_timer）
         self._geo_timer = QTimer(self, singleShot=True, interval=600,
                                  timeout=self.save_geometry)
+        # 桌面层体检：Explorer 崩溃/重启导致 WorkerW 重建后自动恢复嵌入
+        self._embed_check = QTimer(self, interval=5000, timeout=self._embed_health)
+        self._embed_check.start()
+        self._expect_visible = True   # 窗口应显示状态（用于体检时区分用户隐藏）
+        self._native_hwnd = 0
         self._update_clock()
         self._tick()
 
@@ -464,6 +504,7 @@ class FloatWindow(QWidget):
     def _refresh_clock_panel_visibility(self):
         if self.app.config.get("window", "compact"):
             self.clock_panel.setVisible(False)
+            self._sync_clock_timer()
             return
         show_clock = bool(self.app.config.get("window", "show_clock", default=True))
         off = bool(self.app.config.get("offwork", "enabled", default=False))
@@ -473,6 +514,19 @@ class FloatWindow(QWidget):
         self.clock_off_lbl.setVisible(off)
         if show_clock or off:
             self._update_clock()
+        self._sync_clock_timer()
+
+    def _sync_clock_timer(self):
+        """1s 时钟定时器按需启停：仅当窗口可见且时钟区实际显示时才运行，
+        其余时间保持完全静默，待机零占用。"""
+        need = (self.isVisible()
+                and not self.app.config.get("window", "compact")
+                and (bool(self.app.config.get("window", "show_clock", default=True))
+                     or bool(self.app.config.get("offwork", "enabled", default=False))))
+        if need and not self._clock_timer.isActive():
+            self._clock_timer.start()
+        elif not need and self._clock_timer.isActive():
+            self._clock_timer.stop()
 
     def _tick(self):
         # 仅就地刷新逾期状态/时间文案，避免整窗重建造成瞬时闪烁
@@ -498,7 +552,10 @@ class FloatWindow(QWidget):
         self.set_compact(cfg.get("compact", False), save=False)
         set_click_through(self, cfg.get("click_through", False))
         self.show()
-        set_window_z_order(self, bool(cfg.get("topmost")))   # 强制 Z 序，保证置顶生效
+        if cfg.get("topmost"):
+            set_window_z_order(self, True)   # 强制置顶 Z 序
+            unembed_from_desktop(self)       # 解除桌面嵌入，还原为普通顶层窗口
+        self.save_geometry()                 # 持久化位置，供崩溃重建后恢复
 
     def save_geometry(self):
         if self.app.config.get("window", "compact"):
@@ -525,7 +582,115 @@ class FloatWindow(QWidget):
 
     def showEvent(self, e):
         super().showEvent(e)
+        self._expect_visible = True
+        self._track_native()
         apply_frosted(self, self.t)
+        self._sync_clock_timer()
+        self._ensure_desktop_embed()
+
+    def hideEvent(self, e):
+        super().hideEvent(e)
+        self._sync_clock_timer()
+
+    def set_user_hidden(self, hidden: bool):
+        """记录用户主动隐藏（托盘/快捷键），体检恢复时尊重该状态。"""
+        self._expect_visible = not hidden
+
+    def _embed_health(self):
+        """5s 体检：窗口应随桌面层存活，Explorer 崩溃/重启后自动恢复。
+        三种情况：原生窗口被销毁 → 重建；原生窗口在但隐藏 → 强制恢复显示；
+        一切正常 → 保持/恢复桌面层嵌入。"""
+        if self.app.config.get("window", "topmost"):
+            return
+        try:
+            hwnd = getattr(self, "_native_hwnd", 0)
+            if not self._native_alive() \
+                    or (self._expect_visible and hwnd
+                        and not self._native_visible(hwnd)):
+                # 原生窗口被销毁，或"应可见却隐藏"（Qt 在原生窗口被外部
+                # 销毁后会静默重建一个隐藏的代理窗口，winId() 指向它，
+                # 导致 IsWindow 误判存活）→ 一律走重建路径
+                self._revive_window()
+                return
+            if not self._expect_visible:
+                return
+            if not self.isVisible():
+                self.show()
+            if shell_tray_alive() and not embed_to_desktop_if_needed(self):
+                log.info("桌面嵌入失败，将在下轮体检重试")
+            return
+        except Exception:
+            pass
+
+    def _ensure_desktop_embed(self):
+        """非置顶时把窗口嵌入桌面背景层（Win+D 不隐藏、融入桌面）；
+        置顶模式下保持普通置顶窗口。
+        Explorer 崩溃时其 WorkerW 随进程销毁，嵌入其中的窗口会被系统
+        一并销毁（DestroyWindow 语义），这里检测到后重建原生窗口并重新嵌入。"""
+        if self.app.config.get("window", "topmost"):
+            return
+        try:
+            if not self._native_alive():
+                self._revive_window()
+                return
+            if not self.isVisible():
+                return
+            embed_to_desktop_if_needed(self)
+        except Exception:
+            pass
+
+    def _native_alive(self) -> bool:
+        """用上次记录的原生句柄判断窗口是否存活。
+        不能直接调 winId()：Qt 在窗口被外部销毁后会静默重建一个隐藏的
+        原生窗口并返回新句柄，导致检测不到 Explorer 崩溃。"""
+        hwnd = getattr(self, "_native_hwnd", 0)
+        if not hwnd:
+            return True
+        try:
+            return bool(ctypes.windll.user32.IsWindow(hwnd))
+        except Exception:
+            return True
+
+    def _native_visible(self, hwnd) -> bool:
+        """原生窗口是否可见（Qt 的 isVisible 不感知外部 ShowWindow 隐藏）。"""
+        try:
+            return bool(ctypes.windll.user32.IsWindowVisible(
+                wintypes.HWND(hwnd)))
+        except Exception:
+            return True
+
+    def _track_native(self):
+        try:
+            self._native_hwnd = int(self.winId())
+        except Exception:
+            pass
+
+    def _revive_window(self):
+        """桌面层原生窗口随 Explorer 一起被系统销毁后重建。
+        Qt 6.11 不会自动重建外部销毁的原生窗口（winId() 返回失效句柄、
+        show() 空转），正确路径是销毁 QWindow 后重新 show。"""
+        if getattr(self, "_reviving", False) or not self._expect_visible:
+            return
+        self._reviving = True
+        log.info("桌面层原生窗口已销毁（Explorer 重启），正在重建…")
+        try:
+            wh = self.windowHandle()
+            if wh is not None:
+                wh.destroy()
+            self.show()
+            # Qt 重建窗口不会恢复配置里的位置，主动恢复（否则每次 Explorer 崩溃都会漂移）
+            w = self.app.config.get("window")
+            if w and w.get("x") is not None and w.get("y") is not None:
+                self.move(int(w["x"]), int(w["y"]))
+            wh = self.windowHandle()
+            if wh is not None:
+                wh.show()
+            self._track_native()
+            # 嵌入交给下一次体检，避免重建当帧立即 SetParent 触发异常
+        except Exception:
+            log.error("窗口重建失败:\n" + traceback.format_exc())
+        finally:
+            self._reviving = False
 
     # ---------------- DIY 背景模式
     def apply_diy_bg(self, cfg: dict):
@@ -684,14 +849,19 @@ class FloatWindow(QWidget):
         self.panel.setVisible(not on)
         self.compact_bar.setVisible(on)
         if on:
+            self._pre_compact_h = self.height()  # 记录进入紧凑前的高度
             self._update_compact_text()
             self.setFixedHeight(self.compact_bar.sizeHint().height() + 4)
             self.resize(self.width(), self.compact_bar.sizeHint().height() + 4)
         else:
             self.setMinimumHeight(160)
             self.setMaximumHeight(16777215)
-            self.resize(self.width(), 420)
-            self.refresh()          # 展开时构建内容（否则以紧凑模式首次启动时面板为空）
+            # 退出紧凑模式：恢复进入前的高度（不再固定 420 覆盖用户调整）
+            h = self._pre_compact_h if self._pre_compact_h else None
+            self._pre_compact_h = None
+            if h:
+                self.resize(self.width(), max(h, 160))
+            self.refresh(fit=False)   # 展开时构建内容，不重算高度
         self._refresh_clock_panel_visibility()
         apply_window_corners(self, self.t)
 
@@ -726,7 +896,7 @@ class FloatWindow(QWidget):
         return best
 
     # ---------------- 内容构建
-    def refresh(self, soft=False):
+    def refresh(self, soft=False, fit=True):
         if self.app.config.get("window", "compact"):
             self._update_compact_text()
             return
@@ -739,7 +909,7 @@ class FloatWindow(QWidget):
         # 清空
         self._rows = []
         self.expanded = {k: v for k, v in self.expanded.items()
-                         if k.startswith(("y", "m")) or k == "recur"}
+                         if k.startswith(("y", "m")) or k in ("recur", "link")}
         while self.content_lay.count():
             w = self.content_lay.takeAt(0)
             if w.widget():
@@ -757,6 +927,7 @@ class FloatWindow(QWidget):
         months: dict[int, dict[int, list]] = {}
         recurs = []
         reminds = []
+        links = []
         for it in self.app.store.items:
             if not match(it):
                 continue
@@ -766,6 +937,9 @@ class FloatWindow(QWidget):
             if it["type"] == "remind":
                 reminds.append(it)
                 continue
+            if it["type"] == "link":
+                links.append(it)
+                continue
             cd = core.parse_dt(it.get("created"))
             d = cd.date() if cd else date.today()
             months.setdefault(d.year, {}).setdefault(d.month, []).append(it)
@@ -774,7 +948,7 @@ class FloatWindow(QWidget):
         self._rebuild_reminder_bar(reminds)
 
         # ------- 空状态引导
-        if not months and not recurs and not reminds:
+        if not months and not recurs and not reminds and not links:
             hint_lbl = QLabel(tr("✨ 暂无事项\n\n点击上方「⚡ 来活了」快速记录工作或添加循环任务"))
             hint_lbl.setAlignment(Qt.AlignCenter)
             hint_lbl.setWordWrap(True)
@@ -786,7 +960,7 @@ class FloatWindow(QWidget):
         today = date.today()
         for year in sorted(months.keys(), reverse=True):
             ykey = f"y{year}"
-            y_open = self.expanded.get(ykey, year == today.year)
+            y_open = self.expanded.get(ykey, True)
             self.expanded[ykey] = y_open
             yheader = GroupHeader(self, tr("{y}年").replace("{y}", str(year)), ykey)
             self.content_lay.addWidget(yheader)
@@ -796,8 +970,7 @@ class FloatWindow(QWidget):
             ylay.setSpacing(1)
             for month in sorted(months[year].keys(), reverse=True):
                 mkey = f"m{year}_{month:02d}"
-                m_open = self.expanded.get(
-                    mkey, year == today.year and month == today.month)
+                m_open = self.expanded.get(mkey, True)
                 self.expanded[mkey] = m_open
                 mitems = months[year][month]
                 mheader = GroupHeader(self, tr("{m}月").replace("{m}", str(month)), mkey)
@@ -820,12 +993,17 @@ class FloatWindow(QWidget):
         if recurs:
             self._add_recur_section(recurs)
 
+        # ------- 网址直达独立区
+        if links:
+            self._add_link_section(links)
+
         self.content_lay.addStretch()
         # 平铺：窗口高度随内容自适应（无滚动条）；布局生效后再校正一次，
         # 因为新控件要等事件循环处理后 sizeHint 才准确
         self.content_lay.activate()
-        self._fit_height()
-        QTimer.singleShot(0, self._fit_height)
+        if fit:
+            self._fit_height()
+            QTimer.singleShot(0, self._fit_height)
         apply_window_corners(self, self.t)
         self._refresh_clock_panel_visibility()
 
@@ -850,7 +1028,20 @@ class FloatWindow(QWidget):
                                    Qt.TextWordWrap, self.compact_lbl.text())
             self.setFixedHeight(max(rect.height() + 8, 24))
             return
-        self.resize(self.width(), max(self.sizeHint().height(), 160))
+        scr = QGuiApplication.primaryScreen().availableGeometry()
+        if self._user_resized:
+            # 用户手动调过高度：展开/收起不再重算，仅防止超出屏幕
+            if self.height() > max(160, scr.height() - 60):
+                self.resize(self.width(), max(160, scr.height() - 60))
+            return
+        # 内容超高时窗口最多长到屏幕高度-留边，超出部分在内容区滚动查看
+        need = self.content.sizeHint().height() + 24
+        if self.reminder_panel.isVisible():
+            need += self.reminder_panel.sizeHint().height()
+        if self.clock_panel.isVisible():
+            need += self.clock_panel.sizeHint().height()
+        self.resize(self.width(),
+                    min(max(need, 160), max(160, scr.height() - 60)))
 
     def _add_recur_section(self, recurs):
         key = "recur"
@@ -862,13 +1053,39 @@ class FloatWindow(QWidget):
         lay = QVBoxLayout(cont)
         lay.setContentsMargins(10, 0, 0, 2)
         lay.setSpacing(1)
-        for it in self._sorted_items(recurs, True):
+        for it in self._manual_sorted(self._sorted_items(recurs, True)):
             row = ItemRow(self, it, key)
             self._rows.append(row)
             lay.addWidget(row)
         cont.setVisible(r_open)
         cont.setProperty("group_key", key)
         self.content_lay.addWidget(cont)
+
+    def _add_link_section(self, links):
+        key = "link"
+        l_open = self.expanded.get(key, True)
+        self.expanded[key] = l_open
+        header = GroupHeader(self, tr("🔗 网址直达"), key)
+        self.content_lay.addWidget(header)
+        cont = QWidget()
+        lay = QVBoxLayout(cont)
+        lay.setContentsMargins(10, 0, 0, 2)
+        lay.setSpacing(1)
+        for it in self._manual_sorted(
+                sorted(links, key=lambda i: i.get("created", ""), reverse=True)):
+            row = ItemRow(self, it, key)
+            self._rows.append(row)
+            lay.addWidget(row)
+        cont.setVisible(l_open)
+        cont.setProperty("group_key", key)
+        self.content_lay.addWidget(cont)
+
+    def _manual_sorted(self, items):
+        """已手动拖拽排序的按 order 在前，未排序的保持原时间序在后。"""
+        ordered = [i for i in items if (i.get("order") or 0) > 0]
+        rest = [i for i in items if not (i.get("order") or 0) > 0]
+        ordered.sort(key=lambda i: i.get("order", 0))
+        return ordered + rest
 
     def _sorted_items(self, items, is_recur):
         if is_recur:
@@ -934,25 +1151,33 @@ class FloatWindow(QWidget):
         lay = container.layout()
         rows = [lay.itemAt(i).widget() for i in range(lay.count())
                 if isinstance(lay.itemAt(i).widget(), ItemRow)]
-        todos = [r.item for r in rows if r.item["type"] == "todo" and not r.item.get("done")]
-        src = todos.index(row.item)
+        itype = row.item["type"]
+        if itype == "todo":
+            group = [r.item for r in rows
+                     if r.item["type"] == "todo" and not r.item.get("done")]
+        elif itype in ("recur", "link"):
+            group = [r.item for r in rows if r.item["type"] == itype]
+        else:
+            self.refresh()
+            return
+        src = group.index(row.item)
         dst = getattr(self, "_insert_at", src)
-        # _insert_at 是布局索引（含 record 行），换算到 todo 序列
-        dst_todo = 0
+        # _insert_at 是布局索引（含非同类行），换算到同类序列
+        dst_idx = 0
         for i, r in enumerate(rows):
             if i >= dst:
                 break
-            if r.item["type"] == "todo" and not r.item.get("done"):
-                dst_todo += 1
-        if src < dst_todo:
-            dst_todo -= 1
-        dst_todo = max(0, min(dst_todo, len(todos) - 1))
-        if src != dst_todo:
-            todos.insert(dst_todo, todos.pop(src))
-            for n, it in enumerate(todos):
+            if r.item["type"] == itype and not (itype == "todo" and r.item.get("done")):
+                dst_idx += 1
+        if src < dst_idx:
+            dst_idx -= 1
+        dst_idx = max(0, min(dst_idx, len(group) - 1))
+        if src != dst_idx:
+            group.insert(dst_idx, group.pop(src))
+            for n, it in enumerate(group):
                 it["order"] = (n + 1) * 10
             self.app.store.save()
-            core.log.info(f"待办手动排序: {row.item['title']} -> 第{dst_todo + 1}位")
+            core.log.info(f"手动排序({core.type_name(itype)}): {row.item['title']} -> 第{dst_idx + 1}位")
         self.refresh()
 
     def _find_group_container(self, key):

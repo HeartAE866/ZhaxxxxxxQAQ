@@ -8,7 +8,7 @@ import shutil
 import traceback
 from datetime import datetime
 
-from PySide6.QtCore import QTimer, Qt, Signal
+from PySide6.QtCore import QEvent, QObject, QTimer, Qt, Signal
 from PySide6.QtGui import QColor, QFontDatabase, QGuiApplication, QPixmap
 from PySide6.QtWidgets import (QButtonGroup, QCheckBox, QComboBox, QDialog,
                                QFileDialog, QFrame, QGridLayout, QHBoxLayout, QLabel,
@@ -44,6 +44,19 @@ CUSTOM_ACTIONS = [("quick_record", "快速添加工作记录"),
                   ("search", "聚焦搜索框"),
                   ("toggle_compact", "切换紧凑模式"),
                   ("show_hide", "显示/隐藏主界面")]
+
+
+class _WheelGuard(QObject):
+    """滚轮防误触：滑条不响应滚轮调节；下拉框需先单击展开（展开后滚轮
+    事件落在弹出列表上，天然不受影响），未展开时滚轮不切换选项。"""
+
+    def eventFilter(self, obj, ev):
+        if ev.type() == QEvent.Wheel:
+            return True
+        return super().eventFilter(obj, ev)
+
+
+_WHEEL_GUARD = _WheelGuard()
 
 
 class SettingsWindow(FramelessDialog):
@@ -93,6 +106,9 @@ class SettingsWindow(FramelessDialog):
         # 设置窗内回车不应触发任何按钮（防止误关/误操作）
         for b in self.findChildren(QPushButton):
             b.setAutoDefault(False)
+        # 滚轮防误触：横向滑条 + 下拉框（需先单击展开才能滚轮）
+        for w in list(self.findChildren(QComboBox)) + list(self.findChildren(QSlider)):
+            w.installEventFilter(_WHEEL_GUARD)
         self.apply_diy_settings(self.app.config.get("diy_bg_settings", default={}))
 
     def apply_diy_settings(self, cfg: dict):

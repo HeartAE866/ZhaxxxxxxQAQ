@@ -6,7 +6,7 @@ A frameless, frosted-glass floating widget on your desktop: auto-created project
 **完全本地离线运行，不联网、不收集任何信息 · 100% local and offline — no accounts, no cloud, no tracking.**
 （可选：启动时可检查 GitHub 更新，仅访问官方公开接口 · Optional: startup update check, connects only to the public GitHub API）
 
-![Version](https://img.shields.io/badge/version-v1.2.1-blue)
+![Version](https://img.shields.io/badge/version-v1.3.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Python](https://img.shields.io/badge/Python-3.14+-8A2BE2)
 ![PySide6](https://img.shields.io/badge/UI-PySide6-4fc3f7)
@@ -54,7 +54,7 @@ A frameless, frosted-glass floating widget on your desktop: auto-created project
 ### Install
 
 Download the latest installer from [Releases](https://github.com/HeartAE866/ZhaxxxxxxQAQ/releases)
-(`ZhaxxxxxxQAQ_Setup_v1.2.1.exe`) and run it.
+(`ZhaxxxxxxQAQ_Setup_v1.3.0.exe`) and run it.
 
 **For users in China**: if GitHub is slow or unreachable, use the domestic mirror repository:
 [Gitee Mirror](https://gitee.com/HeartAE86/ZhaxxxxxxQAQ) (also findable by searching "Gitee ZhaxxxxxxQAQ");
