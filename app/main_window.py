@@ -21,9 +21,7 @@ from i18n import tr, current_lang
 from widgets import (BgFrame, CompactIconButton,
                      set_click_through, set_window_z_order, apply_frosted,
                      embed_to_desktop_if_needed,
-                     shell_tray_alive, unembed_from_desktop, apply_window_corners,
-                     embed_to_desktop_lively, unembed_from_desktop_lively,
-                     manual_ulw_window, embed_to_desktop_bottom)
+                     shell_tray_alive, unembed_from_desktop, apply_window_corners)
 
 WEEKDAYS = ["一", "二", "三", "四", "五", "六", "日"]
 WEEKDAYS_EN = ["Monday", "Tuesday", "Wednesday", "Thursday",
@@ -435,7 +433,6 @@ class FloatWindow(QWidget):
         # 桌面层体检：Explorer 崩溃/重启导致 WorkerW 重建后自动恢复嵌入
         self._embed_check = QTimer(self, interval=5000, timeout=self._embed_health)
         self._embed_check.start()
-        self._wallpaper = False   # 壁纸模式（Lively 机制）标志
         self._expect_visible = True   # 窗口应显示状态（用于体检时区分用户隐藏）
         self._native_hwnd = 0
         self._update_clock()
@@ -573,54 +570,7 @@ class FloatWindow(QWidget):
         if cfg.get("topmost"):
             set_window_z_order(self, True)   # 强制置顶 Z 序
             unembed_from_desktop(self)       # 解除桌面嵌入，还原为普通顶层窗口
-        if cfg.get("wallpaper"):
-            self._setup_wallpaper_bottom()
         self.save_geometry()                 # 持久化位置，供崩溃重建后恢复
-
-    def _setup_wallpaper_bottom(self):
-        """壁纸/桌面化模式：窗口置底（嵌于桌面层之上），Win+D「显示桌面」
-        会隐藏窗口或把桌面层压到窗口上方——定时守护双重恢复（ShowWindow
-        强制显示 + Z 序插回桌面层之上）。Qt 顶层渲染正常（非子窗口）。"""
-        try:
-            if getattr(self, "_wallpaper", False):
-                return
-            self._wallpaper = True
-            embed_to_desktop_bottom(self)
-            self._wind_timer = QTimer(self, interval=800,
-                                      timeout=self._wind_guard)
-            self._wind_timer.start()
-            log.info(f"壁纸模式已启用 (置底+Win+D守护) geo=({self.x()},{self.y()} "
-                     f"{self.width()}x{self.height()})")
-        except Exception:
-            log.error("_setup_wallpaper_bottom 异常:\n" + traceback.format_exc())
-
-    def _wind_guard(self):
-        """Win+D 守护：窗口被系统隐藏时 ShowWindow 强制恢复；
-        桌面层压到窗口上方时把窗口插回桌面层之上。"""
-        try:
-            if not self._expect_visible:
-                return
-            u32 = ctypes.windll.user32
-            hwnd = int(self.winId())
-            # 1) 隐藏检测：系统外部隐藏（Qt 不感知），ShowWindow 强制恢复
-            if not u32.IsWindowVisible(wintypes.HWND(hwnd)):
-                u32.ShowWindow(wintypes.HWND(hwnd), 5)  # SW_SHOW
-                return
-            # 2) Z 序检测：桌面层(Progman)在窗口上方时插回其上方
-            prev = u32.GetWindow(wintypes.HWND(hwnd), 3)  # GW_HWNDPREV
-            guard = 0
-            while prev and guard < 200:
-                buf = ctypes.create_unicode_buffer(64)
-                u32.GetClassNameW(prev, buf, 64)
-                cls = buf.value
-                if cls == "Progman" or (cls == "WorkerW" and u32.FindWindowExW(
-                        wintypes.HWND(prev), None, "SHELLDLL_DefView", None)):
-                    embed_to_desktop_bottom(self)
-                    return
-                prev = u32.GetWindow(prev, 3)
-                guard += 1
-        except Exception:
-            pass
 
     def save_geometry(self):
         if self.app.config.get("window", "compact"):
