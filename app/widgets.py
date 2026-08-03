@@ -364,6 +364,7 @@ Win+D 显示桌面时 Progman 树保留，应用不消失；同进程 SetParent 
 WorkerW 位于图标层(SHELLDLL_DefView)之上，尺寸/位置跟随应用窗口。"""
 _workerw_wndproc_cb = None
 _workerw_class = None
+_workerw_qwin_refs: dict[int, object] = {}   # WorkerW 句柄 → QWindow 包装（防 GC）
 
 
 class _WNDCLASSW(ctypes.Structure):
@@ -383,20 +384,21 @@ class _WNDCLASSW(ctypes.Structure):
 
 def _workerw_wndproc(hwnd, msg, wp, lp):
     try:
-        if msg == 0x0014:  # WM_ERASEBKGND：不擦除，避免闪黑
-            return 1
+        if msg == 0x0014:  # WM_ERASEBKGND：交给 DefWindowProc 用类画刷擦背景
+            return 0
     except Exception:
         pass
     return ctypes.windll.user32.DefWindowProcW(hwnd, msg, wp, lp)
 
 
-def create_workerw(x: int, y: int, w: int, h: int, bg_rgb: int = 0) -> int:
+def create_workerw(x: int, y: int, w: int, h: int, bg_rgb: int = 0x1E1E28) -> int:
     """创建壁纸层 WorkerW（本进程的中间层窗口），返回 hwnd 或 0。
-    bg_rgb: 背景色（0x00BBGGRR），画在 WM_PAINT；0 则系统默认黑底。"""
+    bg_rgb: 背景色（0x00BBGGRR），作为类画刷擦背景。"""
     global _workerw_wndproc_cb, _workerw_class
     try:
         user32 = _user32()
         kernel32 = ctypes.windll.kernel32
+        gdi32 = ctypes.windll.gdi32
         hinst = kernel32.GetModuleHandleW(None)
         if _workerw_class is None:
             _workerw_wndproc_cb = ctypes.WINFUNCTYPE(
@@ -406,8 +408,7 @@ def create_workerw(x: int, y: int, w: int, h: int, bg_rgb: int = 0) -> int:
             cls.lpfnWndProc = ctypes.cast(_workerw_wndproc_cb, ctypes.c_void_p)
             cls.hInstance = ctypes.c_void_p(hinst)
             cls.lpszClassName = "ZhaxxWorkerW"
-            cls.hbrBackground = ctypes.c_void_p(
-                ctypes.windll.gdi32.GetStockObject(5))  # BLACK_BRUSH
+            cls.hbrBackground = ctypes.c_void_p(gdi32.CreateSolidBrush(bg_rgb))
             cls.style = 0
             cls.cbClsExtra = cls.cbWndExtra = 0
             cls.hIcon = cls.hCursor = None
@@ -442,17 +443,17 @@ def attach_workerw_to_desktop(workerw: int) -> bool:
 
 
 def embed_to_workerw(win: QWidget, workerw: int) -> bool:
-    """把应用窗口嵌入壁纸层（同进程父）：转 WS_CHILD、位置 (0,0)、显示。"""
+    """把应用窗口嵌入壁纸层：用 Qt 的 QWindow 父子关系
+    （QWindow.fromWinId 包装外部窗口 + setParent），Qt 负责渲染与坐标，
+    避免 Win32 SetParent 后 Qt 渲染失效（黑块）。"""
     try:
-        user32 = _user32()
-        hwnd = wintypes.HWND(int(win.winId()))
-        user32.SetParent(hwnd, wintypes.HWND(workerw))
-        style = user32.GetWindowLongPtrW(hwnd, _GWL_STYLE)
-        if not style & _WS_CHILD:
-            user32.SetWindowLongPtrW(hwnd, _GWL_STYLE, style | _WS_CHILD)
-        user32.SetWindowPos(hwnd, wintypes.HWND(0), 0, 0, 0, 0,
-                            _SWP_NOSIZE | _SWP_NOMOVE | _SWP_NOACTIVATE)
-        user32.ShowWindow(hwnd, 5)  # SW_SHOW
+        from PySide6.QtGui import QWindow
+        ww = QWindow.fromWinId(int(workerw))
+        h = win.windowHandle()
+        if not h or not ww:
+            return False
+        _workerw_qwin_refs[workerw] = ww   # 保持包装窗口引用，防 GC
+        h.setParent(ww)
         return True
     except Exception:
         log.error("embed_to_workerw 异常:\n" + traceback.format_exc())

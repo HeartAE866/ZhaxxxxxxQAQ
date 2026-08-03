@@ -581,12 +581,24 @@ class FloatWindow(QWidget):
         """壁纸模式：自建 WorkerW 层挂入桌面，应用嵌入其中——Win+D 不消失。
         Qt 内部 geometry 必须为 (0,0,w,h)：Qt 按“顶层窗口”语义强制原生
         窗口位置/尺寸，嵌入后原生窗口相对 WorkerW 定位，Qt 内部 (0,0)
-        恰好等于 WorkerW 的屏幕位置，窗口才显示在正确位置。"""
+        恰好等于 WorkerW 的屏幕位置，窗口才显示在正确位置。
+        窗口级半透明(WS_EX_LAYERED)与 SetParent 组合渲染失效(黑框)——
+        壁纸模式关闭窗口半透明，由 WorkerW 提供主题背景色。"""
         try:
             if self._workerw:
                 return
+            self.setAttribute(Qt.WA_TranslucentBackground, False)
+            bg = self.t.get("bg", "#1e1e28")
+            # 窗口背景色 = 主题背景（面板半透明色合成到它上面，近似磨砂观感）
+            from PySide6.QtGui import QColor, QPalette
+            pal = self.palette()
+            pal.setColor(QPalette.Window, QColor(bg))
+            self.setPalette(pal)
+            self.setAutoFillBackground(True)
+            bg_rgb = (int(bg[1:3], 16) | (int(bg[3:5], 16) << 8)
+                      | (int(bg[5:7], 16) << 16))
             hwnd = create_workerw(self.x(), self.y(),
-                                  self.width(), self.height())
+                                  self.width(), self.height(), bg_rgb)
             if not hwnd:
                 return
             if not attach_workerw_to_desktop(hwnd):
@@ -595,7 +607,8 @@ class FloatWindow(QWidget):
                 return
             self._workerw = hwnd
             QTimer.singleShot(0, lambda: (self.move(0, 0),
-                                          self.resize(self.width(), self.height())))
+                                          self.resize(self.width(), self.height()),
+                                          apply_window_corners(self, self.t)))
             log.info(f"壁纸层已建立 hwnd={hwnd} "
                      f"geo=({self.x()},{self.y()} {self.width()}x{self.height()})")
         except Exception:
