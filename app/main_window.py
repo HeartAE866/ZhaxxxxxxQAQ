@@ -603,9 +603,8 @@ class FloatWindow(QWidget):
         self._expect_visible = not hidden
 
     def _embed_health(self):
-        """5s 体检：窗口应随桌面层存活，Explorer 崩溃/重启后自动恢复。
-        三种情况：原生窗口被销毁 → 重建；原生窗口在但隐藏 → 强制恢复显示；
-        一切正常 → 保持/恢复桌面层嵌入。"""
+        """5s 体检：保持置底融入桌面（置底 + 压全屏壁纸），
+        Explorer/壁纸进程重启后自动恢复。"""
         if self.app.config.get("window", "topmost"):
             return
         try:
@@ -629,10 +628,8 @@ class FloatWindow(QWidget):
             pass
 
     def _ensure_desktop_embed(self):
-        """非置顶时把窗口嵌入桌面背景层（Win+D 不隐藏、融入桌面）；
-        置顶模式下保持普通置顶窗口。
-        Explorer 崩溃时其 WorkerW 随进程销毁，嵌入其中的窗口会被系统
-        一并销毁（DestroyWindow 语义），这里检测到后重建原生窗口并重新嵌入。"""
+        """非置顶时置底融入桌面（Win+D 不隐藏、不被壁纸遮挡）；
+        置顶模式下保持普通置顶窗口。"""
         if self.app.config.get("window", "topmost"):
             return
         try:
@@ -641,9 +638,10 @@ class FloatWindow(QWidget):
                 return
             if not self.isVisible():
                 return
+            from widgets import embed_to_desktop_if_needed
             embed_to_desktop_if_needed(self)
         except Exception:
-            pass
+            log.error("_ensure_desktop_embed 异常:\n" + traceback.format_exc())
 
     def _native_alive(self) -> bool:
         """用上次记录的原生句柄判断窗口是否存活。
