@@ -283,6 +283,10 @@ class FloatWindow(QWidget):
         self.app = app
         self.t = app.config.get("theme")
         self.expanded: dict[str, bool] = {}
+        saved_exp = app.config.get("window", "expanded", default={})
+        if isinstance(saved_exp, dict):
+            self.expanded.update(
+                {k: v for k, v in saved_exp.items() if isinstance(v, bool)})
         self.highlight_id = None
         self._move_pos = None
         self._search_drag = None
@@ -1106,6 +1110,10 @@ class FloatWindow(QWidget):
         new_state = not container.isVisible()
         container.setVisible(new_state)
         self.expanded[key] = new_state
+        # 持久化展开状态：重启后恢复用户的项目栏/循环/网址收展记忆
+        valid = {k: v for k, v in self.expanded.items()
+                 if k.startswith(("y", "m")) or k in ("recur", "link")}
+        self.app.config.set("window", "expanded", valid)
         header = self._group_headers.get(key)
         if header is not None:
             header.refresh_arrow()

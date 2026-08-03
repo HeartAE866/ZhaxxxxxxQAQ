@@ -99,4 +99,26 @@ assert win2.height() == h_user, "重启后操作不应重置高度"
 print(f"重启后操作高度: {win2.height()} (保持)")
 win2.close()
 
-print("ALL PASS: 用户自定义高度锁定+持久化正常")
+# ---- 展开状态记忆：折叠 → 重启恢复
+fa3, win3 = make_win(cfg_p, store_p)
+ykey = "y2026"
+assert win3.expanded.get(ykey, True), "首次默认展开"
+win3.toggle_group(ykey)
+pump()
+print(f"折叠后 expanded[{ykey}]={win3.expanded.get(ykey)} "
+      f"config={fa3.config.get('window', 'expanded', default={}).get(ykey)}")
+assert win3.expanded.get(ykey) is False
+assert fa3.config.get("window", "expanded", default={}).get(ykey) is False, "折叠状态应写入 config"
+win3.close()
+pump()
+fa4, win4 = make_win(cfg_p, store_p)
+print(f"重启后 expanded[{ykey}]={win4.expanded.get(ykey)} (期望 False=保持折叠)")
+assert win4.expanded.get(ykey) is False, "重启后应恢复折叠状态"
+# 重启后 toggle 也应持久化
+win4.toggle_group(ykey)
+pump()
+assert fa4.config.get("window", "expanded", default={}).get(ykey) is True
+print(f"再展开后 config={fa4.config.get('window','expanded',default={}).get(ykey)} (期望 True)")
+win4.close()
+
+print("ALL PASS: 用户自定义高度锁定+持久化正常；展开状态记忆正常")
