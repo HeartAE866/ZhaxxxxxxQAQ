@@ -259,10 +259,9 @@ def find_desktop_layer():
             if not _has_child_class(hwnd, "SHELLDLL_DefView") \
                     and user32.IsWindowVisible(wintypes.HWND(hwnd)):
                 return hwnd, 0
-        # 兜底 2：Progman 本身（桌面根窗口，始终存在且可见）；
-        # 部分环境（如视频壁纸共存）图标层仍在 Progman 内部，需带出 DefView 句柄
+        # 兜底 2：Progman 本身（桌面根窗口，始终存在且可见）
         if progman and user32.IsWindowVisible(wintypes.HWND(progman)):
-            return progman, _child_named(progman, "SHELLDLL_DefView")
+            return progman, 0
     except Exception:
         log.error("find_desktop_layer 异常:\n" + traceback.format_exc())
     return None, 0
@@ -281,55 +280,22 @@ def _assert_above_icons(user32, hwnd, defview: int):
                             _SWP_NOSIZE | _SWP_NOMOVE | _SWP_NOACTIVATE)
 
 
-def _push_wallpaper_below(user32, hwnd):
-    """把全屏可见的壁纸渲染窗口（CEF-OSC-WIDGET 等）压到目标窗口之下。
-    本机视频壁纸（wallpaperservice）的全屏渲染层在桌面层之上，
-    挂在桌面层的窗口会被其遮挡；置底模式需把壁纸压到挂件之下。"""
-    try:
-        def _cls(h):
-            b = ctypes.create_unicode_buffer(128)
-            user32.GetClassNameW(wintypes.HWND(h), b, 128)
-            return b.value
-
-        targets = []
-        @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
-        def _cb(h, l):
-            c = _cls(h)
-            if c == "CEF-OSC-WIDGET" and \
-                    user32.IsWindowVisible(wintypes.HWND(h)):
-                r = wintypes.RECT()
-                user32.GetWindowRect(wintypes.HWND(h), ctypes.byref(r))
-                if (r.right - r.left) >= 2000 and (r.bottom - r.top) >= 1000:
-                    targets.append(h)
-            return True
-
-        user32.EnumWindows(_cb, 0)
-        for t in targets:
-            user32.SetWindowPos(wintypes.HWND(t), hwnd, 0, 0, 0, 0,
-                                _SWP_NOSIZE | _SWP_NOMOVE | _SWP_NOACTIVATE)
-    except Exception:
-        pass
-
-
 def embed_to_desktop(win: QWidget) -> bool:
-    """置底融入桌面：窗口保持顶层 Tool 窗口，置底 + 把全屏壁纸压到窗口之下。
-    - Win+D 显示桌面不隐藏（Tool 窗口不被 MinimizeAll 处理）
-    - 不被视频壁纸遮挡（壁纸被压到窗口之下）
-    - 不遮挡普通窗口（Z 序在底）
-    返回是否成功。"""
+    """将窗口挂入桌面图标层（图标之上、可交互）。返回是否成功。
+    仅当目标层不可见时拒绝挂载（避免窗口挂在隐藏层"消失"）。"""
     try:
+        target, defview = find_desktop_layer()
+        if not target:
+            return False
         user32 = _user32()
+        if not user32.IsWindowVisible(wintypes.HWND(target)):
+            return False
         hwnd = wintypes.HWND(int(win.winId()))
-        # 确保顶层（清除可能残留的桌面层嵌入状态）
-        user32.SetParent(hwnd, wintypes.HWND(0))
-        style = user32.GetWindowLongPtrW(hwnd, _GWL_STYLE)
-        if style & _WS_CHILD:
-            user32.SetWindowLongPtrW(hwnd, _GWL_STYLE, style & ~_WS_CHILD)
-        # 置底（HWND_BOTTOM）
-        user32.SetWindowPos(hwnd, wintypes.HWND(1), 0, 0, 0, 0,
+        user32.SetParent(hwnd, wintypes.HWND(target))
+        # SetParent 会重置 Z 序：先把窗口提到图标层顶部，再反向压 DefView
+        user32.SetWindowPos(hwnd, wintypes.HWND(0), 0, 0, 0, 0,
                             _SWP_NOSIZE | _SWP_NOMOVE | _SWP_NOACTIVATE)
-        # 压全屏壁纸到窗口之下
-        _push_wallpaper_below(user32, hwnd)
+        _assert_above_icons(user32, hwnd, defview)
         return True
     except Exception:
         log.error("embed_to_desktop 异常:\n" + traceback.format_exc())
