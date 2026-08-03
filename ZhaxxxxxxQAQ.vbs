@@ -3,6 +3,6 @@
 Set fso = CreateObject("Scripting.FileSystemObject")
 Set shell = CreateObject("WScript.Shell")
 root = fso.GetParentFolderName(WScript.ScriptFullName)
-venv = fso.GetParentFolderName(root) & "\venv\Scripts\pythonw.exe"
+venv = root & "\venv\Scripts\pythonw.exe"
 shell.CurrentDirectory = root
 shell.Run """" & venv & """ """ & root & "\app\main.py""", 0, False
