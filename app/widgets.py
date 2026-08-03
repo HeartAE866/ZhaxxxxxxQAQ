@@ -109,10 +109,16 @@ def apply_frosted(win: QWidget, t: dict):
     apply_window_corners(win, t)
 
 
+_rounded_cache: dict[int, tuple[int, int, int]] = {}
+
+
 def apply_rounded_region(win: QWidget, radius: int):
     """把窗口裁剪为圆角矩形，使磨砂边缘也呈圆角。
     注意：SetWindowRgn 使用物理像素，必须乘以 devicePixelRatio，
-    否则在 125%/150% 缩放的电脑上区域比窗口小，导致窗口显示不全。"""
+    否则在 125%/150% 缩放的电脑上区域比窗口小，导致窗口显示不全。
+    缓存 (hwnd, 尺寸, 圆角)：未变化时跳过 SetWindowRgn——
+    SetWindowRgn(redraw=True) 会强制整个窗口重绘，每次操作都调用
+    会造成“幽灵窗口”（操作时窗口整体闪烁）。"""
     try:
         gdi32 = ctypes.windll.gdi32
         user32 = ctypes.windll.user32
@@ -122,12 +128,17 @@ def apply_rounded_region(win: QWidget, radius: int):
         r = max(1, int(radius * dpr))
         if w <= 0 or h <= 0:
             return
+        hwnd = int(win.winId())
+        key = (w, h, r)
+        if _rounded_cache.get(hwnd) == key:
+            return
+        _rounded_cache[hwnd] = key
         gdi32.CreateRoundRectRgn.restype = ctypes.c_void_p
         gdi32.CreateRoundRectRgn.argtypes = [ctypes.c_int] * 4 + [ctypes.c_int, ctypes.c_int]
         user32.SetWindowRgn.argtypes = [wintypes.HWND, ctypes.c_void_p, ctypes.c_bool]
         rgn = gdi32.CreateRoundRectRgn(0, 0, w + 1, h + 1, r * 2, r * 2)
         if rgn:
-            user32.SetWindowRgn(wintypes.HWND(int(win.winId())), rgn, True)
+            user32.SetWindowRgn(wintypes.HWND(hwnd), rgn, True)
     except Exception:
         pass
 
@@ -622,16 +633,9 @@ class Toast(QWidget):
 
     @classmethod
     def show_text(cls, text: str, ms: int = 1800):
-        if cls._instance is None:
-            cls._instance = Toast()
-        inst = cls._instance
-        inst.label.setText(text)
-        inst.adjustSize()
-        scr = QGuiApplication.screenAt(QCursor.pos()) or QGuiApplication.primaryScreen()
-        g = scr.availableGeometry()
-        inst.move(g.right() - inst.width() - 24, g.top() + 24)
-        inst.show()
-        inst._timer.start(ms)
+        # 已按用户要求禁用：任何操作不再弹出 Toast 提示窗口（“幽灵窗口”）。
+        # 如需恢复，将此函数体改回原实现即可。
+        return
 
 
 # ---------------------------------------------------------------- 确认对话框（防误删）
