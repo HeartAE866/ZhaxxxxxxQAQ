@@ -21,7 +21,9 @@ from i18n import tr, current_lang
 from widgets import (BgFrame, CompactIconButton,
                      set_click_through, set_window_z_order, apply_frosted,
                      embed_to_desktop_if_needed,
-                     shell_tray_alive, unembed_from_desktop, apply_window_corners)
+                     shell_tray_alive, unembed_from_desktop, apply_window_corners,
+                     create_workerw, attach_workerw_to_desktop,
+                     embed_to_workerw, move_workerw_with, unembed_from_workerw)
 
 WEEKDAYS = ["一", "二", "三", "四", "五", "六", "日"]
 WEEKDAYS_EN = ["Monday", "Tuesday", "Wednesday", "Thursday",
@@ -433,6 +435,7 @@ class FloatWindow(QWidget):
         # 桌面层体检：Explorer 崩溃/重启导致 WorkerW 重建后自动恢复嵌入
         self._embed_check = QTimer(self, interval=5000, timeout=self._embed_health)
         self._embed_check.start()
+        self._workerw = 0   # 壁纸模式：自建 WorkerW 层句柄（0=未启用）
         self._expect_visible = True   # 窗口应显示状态（用于体检时区分用户隐藏）
         self._native_hwnd = 0
         self._update_clock()
@@ -570,14 +573,52 @@ class FloatWindow(QWidget):
         if cfg.get("topmost"):
             set_window_z_order(self, True)   # 强制置顶 Z 序
             unembed_from_desktop(self)       # 解除桌面嵌入，还原为普通顶层窗口
+        if cfg.get("wallpaper"):
+            self._setup_workerw()
         self.save_geometry()                 # 持久化位置，供崩溃重建后恢复
+
+    def _setup_workerw(self):
+        """壁纸模式：自建 WorkerW 层挂入桌面，应用嵌入其中——Win+D 不消失。
+        Qt 内部 geometry 必须为 (0,0,w,h)：Qt 按“顶层窗口”语义强制原生
+        窗口位置/尺寸，嵌入后原生窗口相对 WorkerW 定位，Qt 内部 (0,0)
+        恰好等于 WorkerW 的屏幕位置，窗口才显示在正确位置。"""
+        try:
+            if self._workerw:
+                return
+            hwnd = create_workerw(self.x(), self.y(),
+                                  self.width(), self.height())
+            if not hwnd:
+                return
+            if not attach_workerw_to_desktop(hwnd):
+                return
+            if not embed_to_workerw(self, hwnd):
+                return
+            self._workerw = hwnd
+            QTimer.singleShot(0, lambda: (self.move(0, 0),
+                                          self.resize(self.width(), self.height())))
+            log.info(f"壁纸层已建立 hwnd={hwnd} "
+                     f"geo=({self.x()},{self.y()} {self.width()}x{self.height()})")
+        except Exception:
+            log.error("_setup_workerw 异常:\n" + traceback.format_exc())
 
     def save_geometry(self):
         if self.app.config.get("window", "compact"):
             return
-        self.app.config.data.setdefault("window", {}).update(
-            x=self.x(), y=self.y(), w=self.width(),
-            h=self.height(), user_resized=self._user_resized)
+        cfg = self.app.config.data.setdefault("window", {})
+        if self._workerw:
+            # 壁纸模式：Qt 内部位置为 (0,0)，持久化 WorkerW 的屏幕位置
+            try:
+                r = wintypes.RECT()
+                ctypes.windll.user32.GetWindowRect(
+                    wintypes.HWND(self._workerw), ctypes.byref(r))
+                cfg.update(x=r.left, y=r.top, w=self.width(),
+                           h=self.height(), user_resized=self._user_resized)
+            except Exception:
+                cfg.update(x=self.x(), y=self.y(), w=self.width(),
+                           h=self.height(), user_resized=self._user_resized)
+        else:
+            cfg.update(x=self.x(), y=self.y(), w=self.width(),
+                       h=self.height(), user_resized=self._user_resized)
         self.app.config.save()
 
     def refresh_theme(self):
@@ -603,10 +644,32 @@ class FloatWindow(QWidget):
         apply_frosted(self, self.t)
         self._sync_clock_timer()
         self._ensure_desktop_embed()
+        if self._workerw:
+            try:
+                ctypes.windll.user32.ShowWindow(
+                    wintypes.HWND(self._workerw), 5)
+            except Exception:
+                pass
 
     def hideEvent(self, e):
         super().hideEvent(e)
         self._sync_clock_timer()
+        if self._workerw:
+            try:
+                ctypes.windll.user32.ShowWindow(
+                    wintypes.HWND(self._workerw), 0)
+            except Exception:
+                pass
+
+    def moveEvent(self, e):
+        super().moveEvent(e)
+        if getattr(self, "_workerw", 0) and not getattr(self, "_ww_moving", False):
+            # 壁纸模式：WorkerW 位置固定，应用 Qt 内部位置始终钉回 (0,0)
+            self._ww_moving = True
+            try:
+                self.move(0, 0)
+            finally:
+                self._ww_moving = False
 
     def set_user_hidden(self, hidden: bool):
         """记录用户主动隐藏（托盘/快捷键），体检恢复时尊重该状态。"""
@@ -744,6 +807,16 @@ class FloatWindow(QWidget):
         if self.app.config.get("window", "compact"):
             QTimer.singleShot(0, self._fit_height)  # 横向缩放后重新换行并校正高度
         self._geo_timer.start()          # 防抖保存尺寸
+        if self._workerw:
+            try:
+                # 壁纸模式：WorkerW 尺寸跟随（位置保持当前屏幕位置）
+                r = wintypes.RECT()
+                ctypes.windll.user32.GetWindowRect(
+                    wintypes.HWND(self._workerw), ctypes.byref(r))
+                move_workerw_with(self._workerw, r.left, r.top,
+                                  self.width(), self.height())
+            except Exception:
+                pass
 
     # ---------------- 八向边缘拖拽缩放（纯 Qt 事件实现，可靠） ----------------
     _RESIZE_CURSORS = {
@@ -785,7 +858,7 @@ class FloatWindow(QWidget):
             typ = ev.type()
             if typ == QEvent.MouseButtonPress and ev.button() == Qt.LeftButton:
                 if not self.app.config.get("window", "locked") \
-                        and self.search.text() == "":
+                        and self.search.text() == "" and not self._workerw:
                     self._search_drag = ev.globalPosition().toPoint() - self.pos()
                     return True
             elif typ == QEvent.MouseMove and self._search_drag is not None \
@@ -813,7 +886,8 @@ class FloatWindow(QWidget):
                     else:
                         obj.unsetCursor()
                 return False
-            if typ == QEvent.MouseButtonPress and ev.button() == Qt.LeftButton:
+            if typ == QEvent.MouseButtonPress and ev.button() == Qt.LeftButton \
+                    and not self._workerw:   # 壁纸模式：禁用边缘缩放
                 pos = self.mapFromGlobal(ev.globalPosition().toPoint())
                 zone = self._edge_zone(pos)
                 if zone:
@@ -1279,7 +1353,8 @@ class FloatWindow(QWidget):
     def mousePressEvent(self, e):
         if e.button() == Qt.LeftButton and e.position().y() < 34 \
                 and not self.app.config.get("window", "locked") \
-                and not self.search.hasFocus():
+                and not self.search.hasFocus() \
+                and not self._workerw:   # 壁纸模式：位置锁定
             self._move_pos = e.globalPosition().toPoint() - self.pos()
         super().mousePressEvent(e)
 
