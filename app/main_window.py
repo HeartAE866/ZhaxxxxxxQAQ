@@ -10,7 +10,7 @@ from datetime import date, datetime, timedelta
 
 from PySide6.QtCore import QEvent, QRect, Qt, QTimer
 from PySide6.QtGui import QCursor, QFont, QGuiApplication
-from PySide6.QtWidgets import (QApplication, QFrame, QHBoxLayout, QLabel,
+from PySide6.QtWidgets import (QFrame, QHBoxLayout, QLabel,
                                QLineEdit, QPushButton, QScrollArea, QVBoxLayout,
                                QWidget)
 
