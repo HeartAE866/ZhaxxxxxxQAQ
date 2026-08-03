@@ -259,9 +259,10 @@ def find_desktop_layer():
             if not _has_child_class(hwnd, "SHELLDLL_DefView") \
                     and user32.IsWindowVisible(wintypes.HWND(hwnd)):
                 return hwnd, 0
-        # 兜底 2：Progman 本身（桌面根窗口，始终存在且可见）
+        # 兜底 2：Progman 本身（桌面根窗口，始终存在且可见）；
+        # 部分环境（如视频壁纸共存）图标层仍在 Progman 内部，需带出 DefView 句柄
         if progman and user32.IsWindowVisible(wintypes.HWND(progman)):
-            return progman, 0
+            return progman, _child_named(progman, "SHELLDLL_DefView")
     except Exception:
         log.error("find_desktop_layer 异常:\n" + traceback.format_exc())
     return None, 0

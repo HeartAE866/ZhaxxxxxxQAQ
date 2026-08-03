@@ -603,10 +603,9 @@ class FloatWindow(QWidget):
         self._expect_visible = not hidden
 
     def _embed_health(self):
-        """5s 体检：桌面层嵌入已禁用——本机视频壁纸环境与 WorkerW 嵌入冲突
-        （嵌入后窗口被压缩为窄条且不可见），保持普通悬浮窗（1.2.1 行为）。"""
-        return
-        # ---- 以下为原嵌入逻辑（保留代码备查，不再执行） ----
+        """5s 体检：窗口应随桌面层存活，Explorer 崩溃/重启后自动恢复。
+        三种情况：原生窗口被销毁 → 重建；原生窗口在但隐藏 → 强制恢复显示；
+        一切正常 → 保持/恢复桌面层嵌入。"""
         if self.app.config.get("window", "topmost"):
             return
         try:
@@ -630,10 +629,10 @@ class FloatWindow(QWidget):
             pass
 
     def _ensure_desktop_embed(self):
-        """桌面嵌入已禁用——本机视频壁纸环境与 WorkerW 嵌入冲突
-        （嵌入后窗口被压缩为窄条且不可见），保持普通悬浮窗。"""
-        return
-        # ---- 以下为原嵌入逻辑（保留代码备查，不再执行） ----
+        """非置顶时把窗口嵌入桌面背景层（Win+D 不隐藏、融入桌面）；
+        置顶模式下保持普通置顶窗口。
+        Explorer 崩溃时其 WorkerW 随进程销毁，嵌入其中的窗口会被系统
+        一并销毁（DestroyWindow 语义），这里检测到后重建原生窗口并重新嵌入。"""
         if self.app.config.get("window", "topmost"):
             return
         try:
