@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (QButtonGroup, QCheckBox, QComboBox, QDialog,
                                QInputDialog,
                                QLineEdit, QListWidget, QListWidgetItem,
                                QPushButton, QScrollArea, QSizePolicy, QSlider,
+                               QSpinBox,
                                QStackedWidget, QTextEdit, 
                                QTreeWidget, QTreeWidgetItem, QVBoxLayout,
                                QWidget)
@@ -94,6 +95,7 @@ class SettingsWindow(FramelessDialog):
         self.body.addLayout(row)
 
         self._page_personal()
+        self._page_compact()
         self._page_folder()
         self._page_remind()
         self._page_hotkey()
@@ -573,6 +575,110 @@ class SettingsWindow(FramelessDialog):
             json.dump(self._edit, f, ensure_ascii=False, indent=2)
         core.log.info(f"导出主题: {path}")
         Toast.show_text(tr("已导出到 导出 目录"))
+
+    # ================================================================ 紧凑模式美化
+    def _page_compact(self):
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        lay.setAlignment(Qt.AlignTop)
+        self.nav.addItem(tr("🎨 紧凑模式"))
+        scroll = self._wrap_scroll(w)
+        self.pages.addWidget(scroll)
+
+        self._compact_cfg = dict(self.app.config.get("compact_style", default={}))
+        comps = self._compact_cfg.get("components") or []
+
+        lay.addWidget(QLabel(tr("显示内容（可多选）")))
+        self._compact_boxes = []
+        for key, label in (("clock", tr("时钟")),
+                           ("offwork", tr("下班倒计时")),
+                           ("urgent", tr("截止倒计时（最近紧急事项）")),
+                           ("recent", tr("最近项目"))):
+            box = QCheckBox(label)
+            box.setChecked(key in comps)
+            box.toggled.connect(self._compact_save)
+            lay.addWidget(box)
+            self._compact_boxes.append((box, key))
+
+        lay.addSpacing(10)
+        lay.addWidget(QLabel(tr("样式")))
+        self._compact_btns = {}
+
+        def _color_row(label, key):
+            row = QHBoxLayout()
+            row.addWidget(QLabel(label))
+            btn = QPushButton()
+            btn.setFixedSize(64, 26)
+            btn.setStyleSheet(
+                f"background-color:{self._compact_cfg.get(key) or '#ffffff'};"
+                f"border:1px solid rgba(128,128,128,120);border-radius:5px;")
+            btn.clicked.connect(lambda: self._compact_pick(key, btn))
+            row.addWidget(btn)
+            row.addStretch()
+            lay.addLayout(row)
+            self._compact_btns[key] = btn
+
+        _color_row(tr("文字颜色"), "text_color")
+        _color_row(tr("背景颜色"), "bg_color")
+
+        row = QHBoxLayout()
+        row.addWidget(QLabel(tr("背景图片")))
+        btn_img = QPushButton(tr("浏览…"))
+        btn_img.clicked.connect(self._compact_pick_image)
+        row.addWidget(btn_img)
+        btn_clear = QPushButton(tr("清除"))
+        btn_clear.clicked.connect(lambda: self._compact_set_image(""))
+        row.addWidget(btn_clear)
+        row.addStretch()
+        lay.addLayout(row)
+
+        row = QHBoxLayout()
+        row.addWidget(QLabel(tr("文字大小（0=默认）")))
+        self._compact_font = QSpinBox()
+        self._compact_font.setRange(0, 48)
+        self._compact_font.setValue(int(self._compact_cfg.get("font_size") or 0))
+        self._compact_font.valueChanged.connect(self._compact_save)
+        row.addWidget(self._compact_font)
+        row.addStretch()
+        lay.addLayout(row)
+
+        tip = QLabel(tr("提示：长按紧凑条可拖动，点击展开常规模式，边缘可横向缩放"))
+        tip.setWordWrap(True)
+        tip.setStyleSheet(f"color:{theme_mod.rgba(self.t['text'], 150)};")
+        lay.addWidget(tip)
+        lay.addSpacing(40)
+
+    def _compact_pick(self, key, btn):
+        c = ColorDialog.get_color(self, self.t,
+                                  QColor(self._compact_cfg.get(key) or "#ffffff"),
+                                  with_alpha=False)
+        if c:
+            self._compact_cfg[key] = c.name()
+            btn.setStyleSheet(f"background-color:{c.name()};"
+                              f"border:1px solid rgba(128,128,128,120);"
+                              f"border-radius:5px;")
+            self._compact_save()
+
+    def _compact_pick_image(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, tr("选择背景图片"), "",
+            tr("图片文件") + " (*.png *.jpg *.jpeg *.bmp *.webp)")
+        if path:
+            self._compact_set_image(path)
+
+    def _compact_set_image(self, path):
+        self._compact_cfg["bg_image"] = path
+        self._compact_save()
+
+    def _compact_save(self, *_):
+        comps = [key for box, key in self._compact_boxes if box.isChecked()]
+        self._compact_cfg["components"] = comps
+        self._compact_cfg["font_size"] = self._compact_font.value()
+        self.app.config.set("compact_style", dict(self._compact_cfg))
+        win = getattr(self.app, "win", None)
+        if win is not None:
+            win._apply_compact_style()
+            win._update_compact_text()
 
     # ================================================================ 文件夹设置
     def _page_folder(self):

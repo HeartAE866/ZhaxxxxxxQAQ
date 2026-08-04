@@ -436,7 +436,7 @@ class FloatWindow(_EdgeResizableMixin, QWidget):
         self.compact_bar.mouseMoveEvent = self._compact_move
         self.compact_bar.mouseReleaseEvent = self._compact_release
 
-        self._clock_timer = QTimer(self, timeout=self._update_clock, interval=1000)
+        self._clock_timer = QTimer(self, timeout=self._clock_tick, interval=1000)
         self._clock_timer.stop()   # 按需启停（_sync_clock_timer）
         self._geo_timer = QTimer(self, singleShot=True, interval=600,
                                  timeout=self.save_geometry)
@@ -477,24 +477,21 @@ class FloatWindow(_EdgeResizableMixin, QWidget):
                 f"{n.year}年{n.month}月{n.day}日 星期{WEEKDAYS[n.weekday()]}")
         self._update_offwork()
 
-    def _update_offwork(self):
-        """按设置计算并刷新下班倒计时文案。"""
+    def _offwork_text(self) -> str:
+        """按设置计算下班倒计时文案（空=不显示）。"""
         cfg = self.app.config.get("offwork", default={})
         n = datetime.now()
         if not cfg.get("enabled"):
-            self.clock_off_lbl.setText("")
-            return
+            return ""
         if cfg.get("weekdays_only", True) and n.weekday() >= 5:
-            self.clock_off_lbl.setText(tr("休息日"))
-            return
+            return tr("休息日")
         try:
             hh, mm = [int(x) for x in str(cfg.get("time", "18:00")).split(":")]
         except Exception:
             hh, mm = 18, 0
         target = n.replace(hour=hh, minute=mm, second=0, microsecond=0)
         if n >= target:
-            self.clock_off_lbl.setText(tr("已下班"))
-            return
+            return tr("已下班")
         secs = int((target - n).total_seconds())
         fmt = cfg.get("format", "min")
         if current_lang() == "en":
@@ -515,7 +512,11 @@ class FloatWindow(_EdgeResizableMixin, QWidget):
         template = str(cfg.get("template", "距下班 {n}"))
         if template == "距下班 {n}":
             template = tr("距下班 {n}")
-        self.clock_off_lbl.setText(template.replace("{n}", value))
+        return template.replace("{n}", value)
+
+    def _update_offwork(self):
+        """刷新时钟面板的下班倒计时文案。"""
+        self.clock_off_lbl.setText(self._offwork_text())
 
     def _refresh_clock_panel_visibility(self):
         if self.app.config.get("window", "compact"):
@@ -533,16 +534,31 @@ class FloatWindow(_EdgeResizableMixin, QWidget):
         self._sync_clock_timer()
 
     def _sync_clock_timer(self):
-        """1s 时钟定时器按需启停：仅当窗口可见且时钟区实际显示时才运行，
-        其余时间保持完全静默，待机零占用。"""
-        need = (self.isVisible()
-                and not self.app.config.get("window", "compact")
-                and (bool(self.app.config.get("window", "show_clock", default=True))
-                     or bool(self.app.config.get("offwork", "enabled", default=False))))
+        """1s 定时器按需启停：时钟面板可见，或紧凑模式含动态组件（时钟/
+        下班倒计时/截止倒计时）时运行；其余场景完全停止，零占用。"""
+        compact = self.app.config.get("window", "compact")
+        if self.isVisible() and compact:
+            comps = self.app.config.get("compact_style", default={}) \
+                .get("components") or []
+            need = any(c in ("clock", "offwork", "urgent") for c in comps)
+        else:
+            need = (self.isVisible()
+                    and not compact
+                    and (bool(self.app.config.get("window", "show_clock",
+                                                  default=True))
+                         or bool(self.app.config.get("offwork", "enabled",
+                                                     default=False))))
         if need and not self._clock_timer.isActive():
             self._clock_timer.start()
         elif not need and self._clock_timer.isActive():
             self._clock_timer.stop()
+
+    def _clock_tick(self):
+        """1s 回调：紧凑模式刷新紧凑文本（时钟/倒计时动态组件），否则刷新时钟面板。"""
+        if self.app.config.get("window", "compact"):
+            self._update_compact_text()
+        else:
+            self._update_clock()
 
     def _tick(self):
         # 仅就地刷新逾期状态/时间文案，避免整窗重建造成瞬时闪烁
@@ -708,15 +724,85 @@ class FloatWindow(_EdgeResizableMixin, QWidget):
         self._refresh_clock_panel_visibility()
         apply_window_corners(self, self.t)
 
-    def _update_compact_text(self):
-        item = self._most_urgent()
-        if item is None:
-            self.compact_lbl.setText(tr("✨ 暂无紧急事项，点击展开"))
+    def _fmt_remain(self, dl) -> str:
+        """截止倒计时剩余时间文案。"""
+        left = dl - core.now()
+        if left.total_seconds() <= 0:
+            return tr("已到期")
+        days, secs = left.days, left.seconds
+        hours, mins = secs // 3600, (secs % 3600) // 60
+        if days > 0:
+            return tr("{d}天{h}小时").replace("{d}", str(days)) \
+                .replace("{h}", str(hours))
+        if hours > 0:
+            return tr("{h}小时{m}分").replace("{h}", str(hours)) \
+                .replace("{m}", str(mins))
+        return tr("{m}分钟").replace("{m}", str(max(mins, 1)))
+
+    def _most_recent(self):
+        """最新一条非提醒事项（紧凑模式「最近」组件）。"""
+        best = None
+        for it in self.app.store.items:
+            if it["type"] == "remind":
+                continue
+            if best is None or (it.get("created") or "") > (best.get("created") or ""):
+                best = it
+        return best
+
+    def _compact_parts(self) -> list:
+        """按 compact_style 配置生成紧凑模式文本行。"""
+        cfg = self.app.config.get("compact_style", default={})
+        comps = cfg.get("components") or ["clock", "offwork", "urgent"]
+        parts = []
+        for c in comps:
+            if c == "clock":
+                parts.append(datetime.now().strftime("%H:%M:%S"))
+            elif c == "offwork":
+                t = self._offwork_text()
+                if t:
+                    parts.append(t)
+            elif c == "urgent":
+                item = self._most_urgent()
+                if item:
+                    dl = core.parse_dt(item.get("deadline"))
+                    if dl:
+                        parts.append(tr("「{t}」剩{r}")
+                                     .replace("{t}", item["title"])
+                                     .replace("{r}", self._fmt_remain(dl)))
+            elif c == "recent":
+                it = self._most_recent()
+                if it:
+                    parts.append(tr("最近：{t}").replace("{t}", it["title"]))
+        return parts
+
+    def _apply_compact_style(self):
+        """应用紧凑模式样式：文字颜色/字号、背景色/图片。"""
+        cfg = self.app.config.get("compact_style", default={})
+        ss = []
+        if cfg.get("text_color"):
+            ss.append(f"color:{cfg['text_color']};")
+        if cfg.get("font_size"):
+            ss.append(f"font-size:{cfg['font_size']}pt;")
+        if ss:
+            self.compact_lbl.setStyleSheet("".join(ss))
         else:
-            self.compact_lbl.setText(item['title'])
-            self.compact_lbl.setStyleSheet(f"color:{self.t['high']};font-weight:bold;")
+            self.compact_lbl.setStyleSheet("")
+        if cfg.get("bg_image") and os.path.exists(cfg["bg_image"]):
+            self.compact_bar.set_bg("", cfg["bg_image"], 100)
+        elif cfg.get("bg_color"):
+            self.compact_bar.set_bg(cfg["bg_color"], "", 100)
+        else:
+            self.compact_bar.set_bg("", "", 100)
+
+    def _update_compact_text(self):
+        parts = self._compact_parts()
+        text = "\n".join(parts) if parts else tr("✨ 暂无信息，点击展开")
+        if text != getattr(self, "_last_compact_text", None):
+            self._last_compact_text = text
+            self.compact_lbl.setText(text)
+            self._apply_compact_style()
+            QTimer.singleShot(0, self._fit_height)   # 换行后校正高度
         self.compact_bar.setToolTip(tr("点击展开常规模式；长按拖拽移动；边缘可横向缩放"))
-        QTimer.singleShot(0, self._fit_height)   # 字数过多换行后校正高度
 
     def _most_urgent(self):
         now = core.now()
@@ -1107,4 +1193,5 @@ class FloatWindow(_EdgeResizableMixin, QWidget):
         # 关闭按钮不退出，仅隐藏（托盘长期驻留）
         e.ignore()
         self.hide()
+
 

@@ -169,6 +169,13 @@ DEFAULT_CONFIG = {
                  "remind_enabled": True},
     "offwork": {"enabled": False, "time": "18:00", "format": "min",
                 "weekdays_only": True, "template": "距下班 {n}"},
+    "compact_style": {
+        "components": ["clock", "offwork", "urgent"],
+        "text_color": "",
+        "bg_color": "",
+        "bg_image": "",
+        "font_size": 0,
+    },
     "hotkeys": {
         "settings": ["ctrl", "shift", "z", "x"],
         "click_through": ["ctrl", "shift", "z", "p"],
