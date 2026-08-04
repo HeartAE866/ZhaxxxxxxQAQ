@@ -743,7 +743,9 @@ class FloatWindow(_EdgeResizableMixin, QWidget):
     def _compact_parts(self) -> list:
         """按 compact_style 配置生成紧凑模式文本行。"""
         cfg = self.app.config.get("compact_style", default={})
-        comps = cfg.get("components") or ["clock", "offwork", "urgent"]
+        comps = cfg.get("components")
+        if comps is None:   # 旧配置无该键：默认三组件；空列表=什么都不显示
+            comps = ["clock", "offwork", "urgent"]
         parts = []
         for c in comps:
             if c == "clock":
@@ -758,6 +760,8 @@ class FloatWindow(_EdgeResizableMixin, QWidget):
                 item = self._most_urgent()
                 if item:
                     dl = core.parse_dt(item.get("deadline"))
+                    if dl is None and item.get("type") == "recur":
+                        dl = core.parse_dt(core.pending_instance(item))
                     if dl:
                         parts.append(tr("「{t}」剩{r}")
                                      .replace("{t}", item["title"])
@@ -765,21 +769,19 @@ class FloatWindow(_EdgeResizableMixin, QWidget):
         return parts
 
     def _apply_compact_style(self):
-        """应用紧凑模式样式：文字颜色/字号、背景色/图片。"""
+        """应用紧凑模式样式：文字颜色/字号（0=跟随主题）、背景色/图片/透明度。"""
         cfg = self.app.config.get("compact_style", default={})
         ss = []
         if cfg.get("text_color"):
             ss.append(f"color:{cfg['text_color']};")
-        if cfg.get("font_size"):
-            ss.append(f"font-size:{cfg['font_size']}pt;")
-        if ss:
-            self.compact_lbl.setStyleSheet("".join(ss))
-        else:
-            self.compact_lbl.setStyleSheet("")
+        fs = cfg.get("font_size") or self.t.get("font_size", 10)
+        ss.append(f"font-size:{fs}pt;")
+        self.compact_lbl.setStyleSheet("".join(ss))
+        alpha = int(cfg.get("bg_alpha", 100))
         if cfg.get("bg_image") and os.path.exists(cfg["bg_image"]):
-            self.compact_bar.set_bg("", cfg["bg_image"], 100)
+            self.compact_bar.set_bg("", cfg["bg_image"], alpha)
         elif cfg.get("bg_color"):
-            self.compact_bar.set_bg(cfg["bg_color"], "", 100)
+            self.compact_bar.set_bg(cfg["bg_color"], "", alpha)
         else:
             self.compact_bar.set_bg("", "", 100)
 

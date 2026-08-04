@@ -174,6 +174,7 @@ DEFAULT_CONFIG = {
         "text_color": "",
         "bg_color": "",
         "bg_image": "",
+        "bg_alpha": 100,
         "font_size": 0,
     },
     "hotkeys": {

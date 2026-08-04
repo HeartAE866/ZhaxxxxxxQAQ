@@ -581,7 +581,7 @@ class SettingsWindow(FramelessDialog):
         w = QWidget()
         lay = QVBoxLayout(w)
         lay.setAlignment(Qt.AlignTop)
-        self.nav.addItem(tr("🎨 紧凑模式"))
+        self.nav.addItem(tr("⏱ 紧凑模式"))
         scroll = self._wrap_scroll(w)
         self.pages.addWidget(scroll)
 
@@ -591,7 +591,7 @@ class SettingsWindow(FramelessDialog):
         lay.addWidget(QLabel(tr("显示内容（可多选）")))
         self._compact_boxes = []
         for key, label in (("clock", tr("时钟")),
-                           ("offwork", tr("下班倒计时")),
+                           ("offwork", tr("下班倒计时（时间在「提醒」页设置）")),
                            ("urgent", tr("最近事项倒计时"))):
             box = QCheckBox(label)
             box.setChecked(key in comps)
@@ -613,6 +613,9 @@ class SettingsWindow(FramelessDialog):
                 f"border:1px solid rgba(128,128,128,120);border-radius:5px;")
             btn.clicked.connect(lambda: self._compact_pick(key, btn))
             row.addWidget(btn)
+            btn_clear = QPushButton(tr("清除"))
+            btn_clear.clicked.connect(lambda: self._compact_clear_color(key, btn))
+            row.addWidget(btn_clear)
             row.addStretch()
             lay.addLayout(row)
             self._compact_btns[key] = btn
@@ -631,8 +634,21 @@ class SettingsWindow(FramelessDialog):
         row.addStretch()
         lay.addLayout(row)
 
+        # 背景透明度（参考个性化：0-100）
         row = QHBoxLayout()
-        row.addWidget(QLabel(tr("文字大小（0=默认）")))
+        row.addWidget(QLabel(tr("背景透明度")))
+        self._compact_alpha = QSlider(Qt.Horizontal, minimum=0, maximum=100,
+                                      value=int(self._compact_cfg.get("bg_alpha", 100)))
+        self._compact_alpha.valueChanged.connect(self._compact_save)
+        row.addWidget(self._compact_alpha, 1)
+        self._compact_alpha_lbl = QLabel(str(self._compact_alpha.value()))
+        self._compact_alpha.valueChanged.connect(
+            lambda v: self._compact_alpha_lbl.setText(str(v)))
+        row.addWidget(self._compact_alpha_lbl)
+        lay.addLayout(row)
+
+        row = QHBoxLayout()
+        row.addWidget(QLabel(tr("文字大小（0=跟随主题）")))
         self._compact_font = QSpinBox()
         self._compact_font.setRange(0, 48)
         self._compact_font.setValue(int(self._compact_cfg.get("font_size") or 0))
@@ -646,6 +662,12 @@ class SettingsWindow(FramelessDialog):
         tip.setStyleSheet(f"color:{theme_mod.rgba(self.t['text'], 150)};")
         lay.addWidget(tip)
         lay.addSpacing(40)
+
+    def _compact_clear_color(self, key, btn):
+        self._compact_cfg[key] = ""
+        btn.setStyleSheet("background-color:#ffffff;"
+                          "border:1px solid rgba(128,128,128,120);border-radius:5px;")
+        self._compact_save()
 
     def _compact_pick(self, key, btn):
         c = ColorDialog.get_color(self, self.t,
@@ -673,6 +695,7 @@ class SettingsWindow(FramelessDialog):
         comps = [key for box, key in self._compact_boxes if box.isChecked()]
         self._compact_cfg["components"] = comps
         self._compact_cfg["font_size"] = self._compact_font.value()
+        self._compact_cfg["bg_alpha"] = self._compact_alpha.value()
         self.app.config.set("compact_style", dict(self._compact_cfg))
         win = getattr(self.app, "win", None)
         if win is not None:
