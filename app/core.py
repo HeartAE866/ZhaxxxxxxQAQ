@@ -362,23 +362,12 @@ def next_occur(item: dict, after: datetime) -> datetime:
         if cand <= after:
             cand += timedelta(days=7)
         return cand
-    if period == "month":
-        md = int(r.get("monthday", created.day))
-        y, m = after.year, after.month
-        for _ in range(240):
-            day = min(md, calendar.monthrange(y, m)[1])
-            cand = datetime(y, m, day, hh, mm)
-            if cand > after:
-                return cand
-            m += 1
-            if m > 12:
-                m, y = 1, y + 1
-    if period == "quarter":
+    if period in ("month", "quarter"):
         md = int(r.get("monthday", created.day))
         base_m = int(r.get("month", created.month))
         y, m = after.year, after.month
-        for _ in range(240):
-            if (m - base_m) % 3 == 0:
+        for _ in range(300):
+            if period == "month" or (m - base_m) % 3 == 0:
                 day = min(md, calendar.monthrange(y, m)[1])
                 cand = datetime(y, m, day, hh, mm)
                 if cand > after:
@@ -386,6 +375,7 @@ def next_occur(item: dict, after: datetime) -> datetime:
             m += 1
             if m > 12:
                 m, y = 1, y + 1
+        return after + timedelta(days=365)
     # year
     md = int(r.get("monthday", created.day))
     base_m = int(r.get("month", created.month))

@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """桌面悬浮主窗：无边框、磨砂半透明，按日期分组 + 循环任务区，支持
 折叠/展开、拖拽排序、搜索、边缘缩放、紧凑模式。"""
 from __future__ import annotations
@@ -20,7 +20,8 @@ from core import log
 from i18n import tr, current_lang
 from widgets import (BgFrame, CompactIconButton,
                      set_click_through, set_window_z_order, apply_frosted,
-                     unembed_from_desktop, apply_window_corners)
+                     unembed_from_desktop, apply_window_corners,
+                     _EdgeResizableMixin)
 
 WEEKDAYS = ["一", "二", "三", "四", "五", "六", "日"]
 WEEKDAYS_EN = ["Monday", "Tuesday", "Wednesday", "Thursday",
@@ -288,7 +289,7 @@ class GroupHeader(QFrame):
 
 
 # ---------------------------------------------------------------- 悬浮主窗
-class FloatWindow(QWidget):
+class FloatWindow(_EdgeResizableMixin, QWidget):
     def __init__(self, app):
         super().__init__()
         self.app = app
@@ -608,6 +609,12 @@ class FloatWindow(QWidget):
     def hideEvent(self, e):
         super().hideEvent(e)
         self._sync_clock_timer()
+        # 隐藏时释放各面板背景位图缓存，降低常驻内存
+        for w in (getattr(self, "panel", None), getattr(self, "header", None),
+                  getattr(self, "reminder_panel", None),
+                  getattr(self, "clock_panel", None)):
+            if w is not None and hasattr(w, "clear_bg_cache"):
+                w.clear_bg_cache()
 
     # ---------------- DIY 背景模式
     def apply_diy_bg(self, cfg: dict):
@@ -645,39 +652,11 @@ class FloatWindow(QWidget):
             QTimer.singleShot(0, self._fit_height)  # 横向缩放后重新换行并校正高度
         self._geo_timer.start()          # 防抖保存尺寸
 
-    # ---------------- 八向边缘拖拽缩放（纯 Qt 事件实现，可靠） ----------------
-    _RESIZE_CURSORS = {
-        "n": Qt.SizeVerCursor, "s": Qt.SizeVerCursor,
-        "w": Qt.SizeHorCursor, "e": Qt.SizeHorCursor,
-        "nw": Qt.SizeFDiagCursor, "se": Qt.SizeFDiagCursor,
-        "ne": Qt.SizeBDiagCursor, "sw": Qt.SizeBDiagCursor,
-    }
-
-    def _edge_zone(self, pos):
-        if self.app.config.get("window", "locked"):
-            return None
-        g = self.rect()
-        m = 6
-        x, y = pos.x(), pos.y()
-        left, right = x <= g.left() + m, x >= g.right() - m
-        top, bottom = y <= g.top() + m, y >= g.bottom() - m
-        if top and left:
-            return "nw"
-        if top and right:
-            return "ne"
-        if bottom and left:
-            return "sw"
-        if bottom and right:
-            return "se"
-        if left:
-            return "w"
-        if right:
-            return "e"
-        if top:
-            return "n"
-        if bottom:
-            return "s"
-        return None
+    def _on_resize_end(self, start_geo):
+        """缩放结束：高度变化则锁定用户自定义高度，并保存几何。"""
+        if self.height() != start_geo.height():
+            self._user_resized = True
+        self.save_geometry()
 
     def eventFilter(self, obj, ev):
         if obj is self.search:
@@ -700,69 +679,11 @@ class FloatWindow(QWidget):
                 return True
         if obj in (self.panel, self.header, self.clock_panel,
                    getattr(self, "compact_bar", None)):
-            typ = ev.type()
-            if typ == QEvent.MouseMove:
-                if self._resize_dir:
-                    self._do_resize(ev.globalPosition().toPoint())
-                    return True
-                if not (ev.buttons() & Qt.LeftButton):
-                    pos = self.mapFromGlobal(ev.globalPosition().toPoint())
-                    zone = self._edge_zone(pos)
-                    if zone:
-                        obj.setCursor(self._RESIZE_CURSORS[zone])
-                    else:
-                        obj.unsetCursor()
-                return False
-            if typ == QEvent.MouseButtonPress and ev.button() == Qt.LeftButton:
-                pos = self.mapFromGlobal(ev.globalPosition().toPoint())
-                zone = self._edge_zone(pos)
-                if zone:
-                    self._resize_dir = zone
-                    self._resize_start = (ev.globalPosition().toPoint(),
-                                          self.geometry())
-                    obj.grabMouse()
-                    return True
-            if typ == QEvent.MouseButtonRelease and ev.button() == Qt.LeftButton:
-                if self._resize_dir:
-                    start_geo = self._resize_start[1]
-                    self._resize_dir = None
-                    self._resize_start = None
-                    obj.releaseMouse()
-                    if self.height() != start_geo.height():
-                        # 用户主动缩放过高度：锁定自定义高度，
-                        # 后续操作(fit)不再重算高度，仅防止超出屏幕
-                        self._user_resized = True
-                    self.save_geometry()
-                    return True
+            enabled = not self.app.config.get("window", "locked")
+            r = self._edge_resize_event(obj, ev, enabled)
+            if r is not None:
+                return r
         return super().eventFilter(obj, ev)
-
-    def _do_resize(self, gpos):
-        start_pos, start_geo = self._resize_start
-        dx = gpos.x() - start_pos.x()
-        dy = gpos.y() - start_pos.y()
-        x, y, w, h = (start_geo.x(), start_geo.y(),
-                      start_geo.width(), start_geo.height())
-        d = self._resize_dir
-        if "w" in d:
-            x = start_geo.x() + dx
-            w = start_geo.width() - dx
-        if "e" in d:
-            w = start_geo.width() + dx
-        if "n" in d:
-            y = start_geo.y() + dy
-            h = start_geo.height() - dy
-        if "s" in d:
-            h = start_geo.height() + dy
-        mw, mh = self.minimumWidth(), self.minimumHeight()
-        if w < mw:
-            if "w" in d:
-                x -= (mw - w)
-            w = mw
-        if h < mh:
-            if "n" in d:
-                y -= (mh - h)
-            h = mh
-        self.setGeometry(x, y, w, h)
 
     # ---------------- 紧凑模式
     def set_compact(self, on: bool, save=True):
@@ -1184,3 +1105,4 @@ class FloatWindow(QWidget):
         # 关闭按钮不退出，仅隐藏（托盘长期驻留）
         e.ignore()
         self.hide()
+

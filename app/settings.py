@@ -51,6 +51,11 @@ from widgets import _WHEEL_GUARD  # noqa: E402
 
 
 class SettingsWindow(FramelessDialog):
+    def showEvent(self, e):
+        super().showEvent(e)
+        # 设置窗内 DIY 背景需实时生效：可见期间保持 500ms 轮询
+        self._diy_timer.start()
+
     def __init__(self, app):
         super().__init__(None, app.config.get("theme_settings"), tr("设置"),
                          width=880)

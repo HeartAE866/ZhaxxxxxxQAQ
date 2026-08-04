@@ -67,6 +67,11 @@ class BgFrame(QFrame):
             self._bg_cache_key = key if self._bg_cache_pm is not None else None
         return self._bg_cache_pm
 
+    def clear_bg_cache(self):
+        """释放背景位图缓存（窗口隐藏时调用，降低常驻内存）。"""
+        self._bg_cache_pm = None
+        self._bg_cache_key = None
+
     def set_bg_radius(self, r):
         self._bg_radius = int(r or 12)
         self.update()
@@ -257,8 +262,113 @@ class CompactIconButton(_VectorButton):
         p.drawLine(cx - half, cy, cx + half, cy)
 
 
+# ---------------------------------------------------------------- 八向边缘缩放（共用）
+class _EdgeResizableMixin:
+    """窗口边缘八向拖拽缩放（FloatWindow / FramelessDialog 共用）。
+    子类可覆写 _on_resize_end(start_geo) 在缩放结束时收尾。"""
+
+    _RESIZE_CURSORS = {
+        "n": Qt.SizeVerCursor, "s": Qt.SizeVerCursor,
+        "w": Qt.SizeHorCursor, "e": Qt.SizeHorCursor,
+        "nw": Qt.SizeFDiagCursor, "se": Qt.SizeFDiagCursor,
+        "ne": Qt.SizeBDiagCursor, "sw": Qt.SizeBDiagCursor,
+    }
+
+    def _edge_zone(self, pos):
+        g = self.rect()
+        m = 6
+        x, y = pos.x(), pos.y()
+        left, right = x <= g.left() + m, x >= g.right() - m
+        top, bottom = y <= g.top() + m, y >= g.bottom() - m
+        if top and left:
+            return "nw"
+        if top and right:
+            return "ne"
+        if bottom and left:
+            return "sw"
+        if bottom and right:
+            return "se"
+        if left:
+            return "w"
+        if right:
+            return "e"
+        if top:
+            return "n"
+        if bottom:
+            return "s"
+        return None
+
+    def _edge_resize_event(self, obj, ev, enabled=True):
+        """边缘缩放事件处理。返回 True/False 表示已处理；None 表示无关。"""
+        typ = ev.type()
+        if typ == QEvent.MouseMove:
+            if getattr(self, "_resize_dir", None):
+                self._do_resize(ev.globalPosition().toPoint())
+                return True
+            if not (ev.buttons() & Qt.LeftButton):
+                pos = self.mapFromGlobal(ev.globalPosition().toPoint())
+                zone = self._edge_zone(pos)
+                if zone:
+                    obj.setCursor(self._RESIZE_CURSORS[zone])
+                else:
+                    obj.unsetCursor()
+            return False
+        if typ == QEvent.MouseButtonPress and ev.button() == Qt.LeftButton:
+            if not enabled:
+                return None
+            pos = self.mapFromGlobal(ev.globalPosition().toPoint())
+            zone = self._edge_zone(pos)
+            if zone:
+                self._resize_dir = zone
+                self._resize_start = (ev.globalPosition().toPoint(),
+                                      self.geometry())
+                obj.grabMouse()
+                return True
+            return None
+        if typ == QEvent.MouseButtonRelease and ev.button() == Qt.LeftButton:
+            if getattr(self, "_resize_dir", None):
+                start_geo = self._resize_start[1]
+                self._resize_dir = None
+                self._resize_start = None
+                obj.releaseMouse()
+                on_end = getattr(self, "_on_resize_end", None)
+                if on_end:
+                    on_end(start_geo)
+                return True
+            return None
+        return None
+
+    def _do_resize(self, gpos):
+        start_pos, start_geo = self._resize_start
+        dx = gpos.x() - start_pos.x()
+        dy = gpos.y() - start_pos.y()
+        x, y, w, h = (start_geo.x(), start_geo.y(),
+                      start_geo.width(), start_geo.height())
+        d = self._resize_dir
+        if "w" in d:
+            x = start_geo.x() + dx
+            w = start_geo.width() - dx
+        if "e" in d:
+            w = start_geo.width() + dx
+        if "n" in d:
+            y = start_geo.y() + dy
+            h = start_geo.height() - dy
+        if "s" in d:
+            h = start_geo.height() + dy
+        mw, mh = self.minimumWidth(), self.minimumHeight()
+        if w < mw:
+            if "w" in d:
+                x -= (mw - w)
+            w = mw
+        if h < mh:
+            if "n" in d:
+                y -= (mh - h)
+            h = mh
+        self.setGeometry(x, y, w, h)
+
+
 # ---------------------------------------------------------------- 无边框对话框基类
-class FramelessDialog(QDialog):
+class FramelessDialog(_EdgeResizableMixin, QDialog):
     """统一风格的无边框磨砂对话框。自带标题栏（可拖动）与关闭按钮。"""
 
     def __init__(self, parent, t: dict, title: str = "", width: int = 420,
@@ -351,8 +461,8 @@ class FramelessDialog(QDialog):
         super().showEvent(e)
         apply_frosted(self, self.t)
         self._apply_diy_dialog_bg()
-        # 仅可见时运行 DIY 背景轮询（零占用：隐藏对话框不再 500ms 唤醒）
-        self._diy_timer.start()
+        # 默认不轮询：仅设置窗（DIY 编辑实时生效）覆写 showEvent 启动
+        self._diy_timer.stop()
 
     def hideEvent(self, e):
         super().hideEvent(e)
@@ -362,95 +472,14 @@ class FramelessDialog(QDialog):
         super().resizeEvent(e)
         apply_window_corners(self, self.t)  # 更新圆角裁剪区域
 
-    # ---------------- 八向边缘缩放
-    _RESIZE_CURSORS = {
-        "n": Qt.SizeVerCursor, "s": Qt.SizeVerCursor,
-        "w": Qt.SizeHorCursor, "e": Qt.SizeHorCursor,
-        "nw": Qt.SizeFDiagCursor, "se": Qt.SizeFDiagCursor,
-        "ne": Qt.SizeBDiagCursor, "sw": Qt.SizeBDiagCursor,
-    }
-
-    def _edge_zone(self, pos):
-        g = self.rect()
-        m = 6
-        x, y = pos.x(), pos.y()
-        left, right = x <= g.left() + m, x >= g.right() - m
-        top, bottom = y <= g.top() + m, y >= g.bottom() - m
-        if top and left:
-            return "nw"
-        if top and right:
-            return "ne"
-        if bottom and left:
-            return "sw"
-        if bottom and right:
-            return "se"
-        if left:
-            return "w"
-        if right:
-            return "e"
-        if top:
-            return "n"
-        if bottom:
-            return "s"
-        return None
+    # ---------------- 八向边缘缩放（_EdgeResizableMixin 提供）
 
     def eventFilter(self, obj, ev):
         if obj is self.panel:
-            typ = ev.type()
-            if typ == QEvent.MouseMove:
-                if self._resize_dir:
-                    self._do_resize(ev.globalPosition().toPoint())
-                    return True
-                if not (ev.buttons() & Qt.LeftButton):
-                    zone = self._edge_zone(ev.position())
-                    if zone:
-                        self.panel.setCursor(self._RESIZE_CURSORS[zone])
-                    else:
-                        self.panel.unsetCursor()
-                return False
-            if typ == QEvent.MouseButtonPress and ev.button() == Qt.LeftButton:
-                zone = self._edge_zone(ev.position())
-                if zone:
-                    self._resize_dir = zone
-                    self._resize_start = (ev.globalPosition().toPoint(),
-                                          self.geometry())
-                    self.panel.grabMouse()
-                    return True
-            if typ == QEvent.MouseButtonRelease and ev.button() == Qt.LeftButton:
-                if self._resize_dir:
-                    self._resize_dir = None
-                    self._resize_start = None
-                    self.panel.releaseMouse()
-                    return True
+            r = self._edge_resize_event(obj, ev)
+            if r is not None:
+                return r
         return super().eventFilter(obj, ev)
-
-    def _do_resize(self, gpos):
-        start_pos, start_geo = self._resize_start
-        dx = gpos.x() - start_pos.x()
-        dy = gpos.y() - start_pos.y()
-        x, y, w, h = (start_geo.x(), start_geo.y(),
-                      start_geo.width(), start_geo.height())
-        d = self._resize_dir
-        if "w" in d:
-            x = start_geo.x() + dx
-            w = start_geo.width() - dx
-        if "e" in d:
-            w = start_geo.width() + dx
-        if "n" in d:
-            y = start_geo.y() + dy
-            h = start_geo.height() - dy
-        if "s" in d:
-            h = start_geo.height() + dy
-        mw, mh = self.minimumWidth(), self.minimumHeight()
-        if w < mw:
-            if "w" in d:
-                x -= (mw - w)
-            w = mw
-        if h < mh:
-            if "n" in d:
-                y -= (mh - h)
-            h = mh
-        self.setGeometry(x, y, w, h)
 
     # 标题栏拖动
     def mousePressEvent(self, e):
