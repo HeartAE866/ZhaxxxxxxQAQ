@@ -8,7 +8,7 @@ import shutil
 import traceback
 from datetime import datetime
 
-from PySide6.QtCore import QEvent, QObject, QTimer, Qt, Signal
+from PySide6.QtCore import QTimer, Qt, Signal
 from PySide6.QtGui import QColor, QFontDatabase, QGuiApplication, QPixmap
 from PySide6.QtWidgets import (QButtonGroup, QCheckBox, QComboBox, QDialog,
                                QFileDialog, QFrame, QGridLayout, QHBoxLayout, QLabel,
@@ -46,22 +46,11 @@ CUSTOM_ACTIONS = [("quick_record", "快速添加工作记录"),
                   ("show_hide", "显示/隐藏主界面")]
 
 
-class _WheelGuard(QObject):
-    """滚轮防误触：滑条不响应滚轮调节；下拉框需先单击展开（展开后滚轮
-    事件落在弹出列表上，天然不受影响），未展开时滚轮不切换选项。"""
-
-    def eventFilter(self, obj, ev):
-        if ev.type() == QEvent.Wheel:
-            return True
-        return super().eventFilter(obj, ev)
-
-
-_WHEEL_GUARD = _WheelGuard()
+# 滚轮防误触（与 widgets.py 共用同一实现与单例，避免重复定义）
+from widgets import _WHEEL_GUARD  # noqa: E402
 
 
 class SettingsWindow(FramelessDialog):
-    changed = Signal()
-
     def __init__(self, app):
         super().__init__(None, app.config.get("theme_settings"), tr("设置"),
                          width=880)
@@ -1159,7 +1148,7 @@ class SettingsWindow(FramelessDialog):
             except Exception:
                 core.log.error(f"删除项目文件夹失败 {base}:\n"
                                + traceback.format_exc())
-        lang = self.app.config.get("language", default="en")
+        lang = self.app.config.get("language", default="zh")
         self.app.config.data = json.loads(json.dumps(core.DEFAULT_CONFIG))
         self.app.config.data["language"] = lang   # 保留当前语言，重置后不跳变
         self.app.config.save()

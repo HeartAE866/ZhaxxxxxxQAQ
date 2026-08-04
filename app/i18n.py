@@ -24,6 +24,9 @@ _TRANSLATIONS = {
     # ---------------- 通用按钮 / 提示 ----------------
     "确定": "OK",
     "取消": "Cancel",
+    "倒计时结束，请再次确认：确定执行该操作":
+        "Countdown finished. Confirm again to proceed",
+    "⚠ {n} 秒后可点击「{ok}」…": "⚠ Clickable in {n}s («{ok}»)…",
     "保存": "Save",
     "继续": "Continue",
     "删除": "Delete",
@@ -52,8 +55,6 @@ _TRANSLATIONS = {
     "主题": "Theme",
     "提醒": "Reminder",
     "语言": "Language",
-    "确定执行该操作": "Confirm to proceed",
-    "不确定": "Not sure",
 
     # ---------------- 主界面 ----------------
     "⚡ 来活了": "⚡ Get to Work",
@@ -109,7 +110,6 @@ _TRANSLATIONS = {
     "📂 打开工作目录": "📂 Open Work Folder",
 
     # ---------------- 提醒 ----------------
-    "提醒完成: ": "",
     "循环任务到时间了（{desc}）": "Recurring task time ({desc})",
     "提醒时间到（{time}）": "Reminder time reached ({time})",
     "待办截止时间已到（{deadline}）": "Todo due ({deadline})",

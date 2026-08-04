@@ -36,7 +36,7 @@ ICON_PATH = os.path.join(RES_DIR, "icon.jpg")
 LOGO_PATH = os.path.join(RES_DIR, "logo.png")
 VBS_PATH = os.path.join(ROOT, "ZhaxxxxxxQAQ.vbs")
 APP_NAME = "ZhaxxxxxxQAQ"
-APP_VERSION = "1.3.0"
+APP_VERSION = "1.3.0beta3"
 RUN_REG_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 
 # 托盘图标：优先用户桌面上的 图标.png（按当前用户主目录推导，不硬编码个人路径），
@@ -65,9 +65,11 @@ def dt_str(dt: datetime) -> str:
     return dt.strftime(FMT)
 
 
-def parse_dt(s: str | None) -> datetime | None:
-    if not s:
-        return None
+from functools import lru_cache
+
+
+@lru_cache(maxsize=512)
+def _parse_cached(s: str):
     # 兼容 ISO 风格（T 分隔，如 2026-08-03T15:57），统一按空格格式解析
     if "T" in s:
         s = s.replace("T", " ")
@@ -75,6 +77,13 @@ def parse_dt(s: str | None) -> datetime | None:
         return datetime.strptime(s, FMT)
     except (ValueError, TypeError):
         return None
+
+
+def parse_dt(s: str | None) -> datetime | None:
+    """解析时间字符串（带缓存：常驻后台每 tick 高频解析同一批时间）。"""
+    if not s:
+        return None
+    return _parse_cached(s)
 
 
 # ---------------------------------------------------------------- 日志
@@ -246,7 +255,6 @@ def new_item(item_type: str, title: str, **kw) -> dict:
         "remind_time": kw.get("remind_time"),         # remind 用：提醒时间（ISO 分钟）
         "notified_for": kw.get("notified_for"),       # 已触发提醒的时间标记
         "done": kw.get("done", item_type == "record"),
-        "notified": False,
         "recur": kw.get("recur"),             # {"period","time","weekday","monthday","month"}
         "completed_instances": kw.get("completed_instances", []),  # recur 完成时间戳
         "url": kw.get("url"),                 # link 用：直达网址
@@ -653,7 +661,6 @@ def _row_to_item(row: dict) -> dict:
         "remind_advance": int(adv) if str(adv or "").isdigit() else None,
         "remind_time": row.get("remind_time") or None,
         "notified_for": row.get("notified_for") or None,
-        "notified": False,
         "recur": recur,
         "completed_instances": [t for t in (row.get("completed_instances") or "").split(";") if t],
         "url": row.get("url") or None, "bar_color": row.get("bar_color") or None,
@@ -689,7 +696,6 @@ def import_file(path: str) -> list[dict]:
         it.setdefault("id", uuid.uuid4().hex[:12])
         it.setdefault("completed_instances", [])
         it.setdefault("tags", [])
-        it.setdefault("notified", False)
     return items
 
 

@@ -179,26 +179,10 @@ def set_window_z_order(win: QWidget, topmost: bool):
         pass
 
 
-# ---------------------------------------------------------------- 桌面层嵌入（WorkerW）
-"""把窗口挂入桌面图标层 WorkerW（图标之上、可点击交互）：Win+D 不隐藏、
-Explorer 崩溃/重启后自动恢复。
-要点：不能挂壁纸层——图标层整屏盖在壁纸层之上，挂壁纸层的窗口永远收不到
-鼠标点击。挂图标层后还必须显式把 SHELLDLL_DefView 压到窗口之下，否则
-整屏的图标 ListView 会吃掉所有点击（SetWindowPos 置顶对 DefView 无效）。"""
-_WM_SPAWN_WORKERW = 0x052C
-_SMTO_NORMAL = 0x0002
-_GW_CHILD, _GW_HWNDNEXT = 5, 2
-_GA_PARENT = 1   # GetAncestor：真实父窗口（GetParent 对顶层窗口返回的是所有者）
+# ---------------------------------------------------------------- Win32 窗口辅助
 _GWL_STYLE = -16
 _WS_CHILD = 0x40000000
 _SWP_NOSIZE, _SWP_NOMOVE, _SWP_NOACTIVATE = 0x0001, 0x0002, 0x0010
-
-
-def _class_name(hwnd) -> str:
-    buf = ctypes.create_unicode_buffer(128)
-    ctypes.windll.user32.GetClassNameW(wintypes.HWND(hwnd), buf, 128)
-    return buf.value
-
 
 _user32_cache = None
 
@@ -212,133 +196,6 @@ def _user32():
             getattr(u, _fn).restype = wintypes.HWND
         _user32_cache = u
     return _user32_cache
-
-
-def _child_named(hwnd, cls: str):
-    """在 hwnd 的直接子窗口（含被拥有窗口）中找指定类名，返回句柄或 0。"""
-    user32 = _user32()
-    child = user32.GetWindow(wintypes.HWND(hwnd), _GW_CHILD)
-    while child:
-        if _class_name(child) == cls:
-            return child
-        child = user32.GetWindow(child, _GW_HWNDNEXT)
-    return 0
-
-
-def _has_child_class(hwnd, cls: str) -> bool:
-    return bool(_child_named(hwnd, cls))
-
-
-def shell_tray_alive() -> bool:
-    """Explorer 是否存活（Shell_TrayWnd 是否还存在）。
-    Explorer 崩溃后其窗口树销毁，重启后才重建。"""
-    try:
-        return bool(_user32().FindWindowW("Shell_TrayWnd", None))
-    except Exception:
-        return False
-
-
-def find_desktop_layer():
-    """定位桌面图标层：返回 (目标层窗口句柄, 该层内 SHELLDLL_DefView 句柄或 0)。
-    步骤：向 Progman 发送 0x052C/0xD 让其生成 WorkerW 层；
-    然后按 Z 序（EnumWindows 顶层优先）找含 SHELLDLL_DefView（图标层）的
-    WorkerW（多桌面工具会创建多个 WorkerW，不能用"不含 DefView"来猜）。
-    兜底：无图标层（Explorer 异常/桌面图标全隐藏）时优先取可见的 WorkerW，
-    绝不用隐藏层（窗口挂入隐藏父窗口会整体不可见）；再兜底 Progman。"""
-    try:
-        user32 = _user32()
-        progman = user32.FindWindowW("Progman", None)
-        if progman:
-            out = ctypes.c_ulong()
-            user32.SendMessageTimeoutW(wintypes.HWND(progman), _WM_SPAWN_WORKERW,
-                                       0xD, 0, _SMTO_NORMAL, 1000, ctypes.byref(out))
-        all_ww: list[int] = []
-
-        @ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)
-        def _cb(hwnd, _lp):
-            if _class_name(hwnd) == "WorkerW":
-                all_ww.append(int(hwnd))
-            return True
-
-        user32.EnumWindows(_cb, 0)
-        for hwnd in all_ww:
-            defview = _child_named(hwnd, "SHELLDLL_DefView")
-            if defview and user32.IsWindowVisible(wintypes.HWND(hwnd)):
-                return hwnd, defview
-        # 兜底 1：第一个可见且不含 DefView 的 WorkerW
-        for hwnd in all_ww:
-            if not _has_child_class(hwnd, "SHELLDLL_DefView") \
-                    and user32.IsWindowVisible(wintypes.HWND(hwnd)):
-                return hwnd, 0
-        # 兜底 2：Progman 本身（桌面根窗口，始终存在且可见）
-        if progman and user32.IsWindowVisible(wintypes.HWND(progman)):
-            return progman, 0
-    except Exception:
-        log.error("find_desktop_layer 异常:\n" + traceback.format_exc())
-    return None, 0
-
-
-def _assert_above_icons(user32, hwnd, defview: int):
-    """强制窗口位于图标列表之上：
-    1) 必须带 WS_CHILD（否则只是"被拥有"关系，不参与子级 Z 序，永远盖不住图标层）；
-    2) SetWindowPos 置顶对 SHELLDLL_DefView 无效（Explorer 会保持它在顶层），
-    需要反向把 DefView 压到窗口之下。"""
-    style = user32.GetWindowLongPtrW(hwnd, _GWL_STYLE)
-    if not style & _WS_CHILD:
-        user32.SetWindowLongPtrW(hwnd, _GWL_STYLE, style | _WS_CHILD)
-    if defview:
-        user32.SetWindowPos(wintypes.HWND(defview), hwnd, 0, 0, 0, 0,
-                            _SWP_NOSIZE | _SWP_NOMOVE | _SWP_NOACTIVATE)
-
-
-def embed_to_desktop(win: QWidget) -> bool:
-    """将窗口挂入桌面图标层（图标之上、可交互）。返回是否成功。
-    仅当目标层不可见时拒绝挂载（避免窗口挂在隐藏层"消失"）。"""
-    try:
-        target, defview = find_desktop_layer()
-        if not target:
-            return False
-        user32 = _user32()
-        if not user32.IsWindowVisible(wintypes.HWND(target)):
-            return False
-        hwnd = wintypes.HWND(int(win.winId()))
-        user32.SetParent(hwnd, wintypes.HWND(target))
-        # SetParent 会重置 Z 序：先把窗口提到图标层顶部，再反向压 DefView
-        user32.SetWindowPos(hwnd, wintypes.HWND(0), 0, 0, 0, 0,
-                            _SWP_NOSIZE | _SWP_NOMOVE | _SWP_NOACTIVATE)
-        _assert_above_icons(user32, hwnd, defview)
-        return True
-    except Exception:
-        log.error("embed_to_desktop 异常:\n" + traceback.format_exc())
-        return False
-
-
-def embed_to_desktop_if_needed(win: QWidget) -> bool:
-    """窗口已挂在目标层下则仅保持图标之上；否则重新挂载
-    （覆盖 Explorer 崩溃/重启、图标层重建导致桌面层变化的场景）。
-    若窗口挂在不可见父窗口下（导致整体不可见），先撤销再重新挂载。"""
-    try:
-        target, defview = find_desktop_layer()
-        if not target:
-            return False
-        user32 = _user32()
-        hwnd = wintypes.HWND(int(win.winId()))
-        anc = user32.GetAncestor(hwnd, _GA_PARENT)
-        parent = anc if anc else 0
-        if parent == target:
-            # 已在正确层：确保仍排在图标之上（Explorer 可能重新提升 DefView）
-            _assert_above_icons(user32, hwnd, defview)
-            return True
-        if parent:
-            # 挂在别的（可能是已消失/隐藏的）层：先撤销再重挂
-            user32.SetParent(hwnd, wintypes.HWND(0))
-        ok = embed_to_desktop(win)
-        if ok:
-            log.info(f"桌面嵌入恢复 (hwnd={hwnd.value})")
-        return ok
-    except Exception:
-        log.error("embed_to_desktop_if_needed 异常:\n" + traceback.format_exc())
-        return False
 
 
 def unembed_from_desktop(win: QWidget):
@@ -446,7 +303,6 @@ class FramelessDialog(QDialog):
         self.panel.setMouseTracking(True)
         self.panel.installEventFilter(self)
         self._diy_timer = QTimer(self, interval=500, timeout=self._live_diy)
-        self._diy_timer.start()
 
     def _find_diy_app(self):
         """向上找持有 app 的父级（只找一次，之后缓存）。"""
@@ -495,6 +351,12 @@ class FramelessDialog(QDialog):
         super().showEvent(e)
         apply_frosted(self, self.t)
         self._apply_diy_dialog_bg()
+        # 仅可见时运行 DIY 背景轮询（零占用：隐藏对话框不再 500ms 唤醒）
+        self._diy_timer.start()
+
+    def hideEvent(self, e):
+        super().hideEvent(e)
+        self._diy_timer.stop()
 
     def resizeEvent(self, e):
         super().resizeEvent(e)
@@ -664,7 +526,7 @@ class ConfirmDialog(FramelessDialog):
             self.body.addWidget(self.checkbox)
         row = QHBoxLayout()
         row.addStretch()
-        btn_no = QPushButton("取消")
+        btn_no = QPushButton(tr("取消"))
         btn_no.clicked.connect(self.reject)
         btn_yes = QPushButton(ok_text, objectName="AccentButton")
         if danger:
@@ -699,7 +561,7 @@ class CountdownDialog(FramelessDialog):
         self.body.addWidget(self.count_lbl)
         row = QHBoxLayout()
         row.addStretch()
-        btn_no = QPushButton("取消")
+        btn_no = QPushButton(tr("取消"))
         btn_no.clicked.connect(self.reject)
         self.btn_yes = QPushButton(ok_text, objectName="AccentButton")
         self.btn_yes.clicked.connect(self.accept)
@@ -715,10 +577,14 @@ class CountdownDialog(FramelessDialog):
         if self._left <= 0:
             self._timer.stop()
             self.btn_yes.setEnabled(True)
-            self.count_lbl.setText("倒计时结束，请再次确认：确定执行该操作")
+            self.count_lbl.setText(
+                tr("倒计时结束，请再次确认：确定执行该操作"))
         else:
             self.btn_yes.setEnabled(False)
-            self.count_lbl.setText(f"⚠ {self._left} 秒后可点击「{self.btn_yes.text()}」…")
+            self.count_lbl.setText(
+                tr("⚠ {n} 秒后可点击「{ok}」…")
+                .replace("{n}", str(self._left))
+                .replace("{ok}", self.btn_yes.text()))
             self._left -= 1
 
 

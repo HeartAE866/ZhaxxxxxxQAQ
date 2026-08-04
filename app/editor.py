@@ -58,7 +58,6 @@ class ItemEditDialog(FramelessDialog):
         self.item_type = item_type
         self.item = item
         self.config = config or _find_config(parent)
-        self.result_item = None
 
         self.title_edit = QLineEdit(item["title"] if item else "")
         self.title_edit.setPlaceholderText(tr("请输入事项名称…"))
@@ -347,7 +346,6 @@ class ItemEditDialog(FramelessDialog):
                 it["deadline"] = None
             adv = self.advance.currentData()
             it["remind_advance"] = None if adv == -1 else adv
-            it["notified"] = False
         if self.item_type == "recur":
             p = self.period.currentData()
             r = {"period": p, "time": f"{self.recur_hour.currentText()}:{self.recur_min.currentText()}"}
@@ -362,7 +360,6 @@ class ItemEditDialog(FramelessDialog):
         if self.item_type != "link":
             p = self.priority.currentData()
             it["priority"] = core.auto_priority(it) if p == "auto" else p
-        self.result_item = it
         self.saved.emit(it)
         self.accept()
 
@@ -376,7 +373,6 @@ class ReminderEditDialog(FramelessDialog):
                          width=400)
         self.setWindowModality(Qt.NonModal)
         self.item = item
-        self.result_item = None
 
         self.title_edit = QLineEdit(item["title"] if item else "")
         self.title_edit.setPlaceholderText(tr("请输入提醒内容，如：开周会…"))
@@ -428,7 +424,6 @@ class ReminderEditDialog(FramelessDialog):
         it["remind_time"] = core.dt_str(qdt.replace(second=0, microsecond=0))
         it["remind_advance"] = self.advance.currentData()
         it["notified_for"] = None
-        self.result_item = it
         self.saved.emit(it)
         self.accept()
 

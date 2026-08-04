@@ -20,8 +20,7 @@ from core import log
 from i18n import tr, current_lang
 from widgets import (BgFrame, CompactIconButton,
                      set_click_through, set_window_z_order, apply_frosted,
-                     embed_to_desktop_if_needed,
-                     shell_tray_alive, unembed_from_desktop, apply_window_corners)
+                     unembed_from_desktop, apply_window_corners)
 
 WEEKDAYS = ["一", "二", "三", "四", "五", "六", "日"]
 WEEKDAYS_EN = ["Monday", "Tuesday", "Wednesday", "Thursday",
@@ -204,22 +203,34 @@ class ItemRow(QFrame):
         return ""
 
     def refresh_soft(self):
-        """就地更新随时间变化的显示（完成状态、逾期、时间文案），不重建控件。"""
+        """就地更新随时间变化的显示（完成状态、逾期、时间文案），不重建控件。
+        字体/颜色仅在实际变化时设置（避免每 tick 重建 QFont 与样式重算）。"""
         done = self.is_done()
         overdue = self.is_overdue()
         t = self.t
-        f = QFont()
-        f.setStrikeOut(done)
-        self.title_lbl.setFont(f)
+        if done != getattr(self, "_soft_done", None):
+            self._soft_done = done
+            f = getattr(self, "_soft_font", None)
+            if f is None:
+                f = QFont()
+                self._soft_font = f
+            f.setStrikeOut(done)
+            self.title_lbl.setFont(f)
         color = t["high"] if overdue else (t["done_text"] if done else t["text"])
-        self.title_lbl.setStyleSheet(f"color:{color};")
+        if color != getattr(self, "_soft_color", None):
+            self._soft_color = color
+            self.title_lbl.setStyleSheet(f"color:{color};")
         self.time_lbl.setText(self.time_text())
         if self.win.highlight_id == self.item["id"]:
-            self.setStyleSheet(
-                f"#ItemRow{{background-color:{theme_mod.rgba(t['accent'],70)};"
-                f"border:1px solid {theme_mod.rgba(t['accent'],180)};border-radius:8px;}}")
+            if not getattr(self, "_soft_hl", False):
+                self._soft_hl = True
+                self.setStyleSheet(
+                    f"#ItemRow{{background-color:{theme_mod.rgba(t['accent'],70)};"
+                    f"border:1px solid {theme_mod.rgba(t['accent'],180)};border-radius:8px;}}")
         else:
-            self._apply_hover(self._hovering)
+            if getattr(self, "_soft_hl", True):
+                self._soft_hl = False
+                self._apply_hover(self._hovering)
 
     # ---------------- 交互
     def _apply_hover(self, on: bool):
@@ -424,17 +435,10 @@ class FloatWindow(QWidget):
         self.compact_bar.mouseMoveEvent = self._compact_move
         self.compact_bar.mouseReleaseEvent = self._compact_release
 
-        self._clock = QTimer(self, timeout=self._tick, interval=20000)
-        self._clock.start()
         self._clock_timer = QTimer(self, timeout=self._update_clock, interval=1000)
         self._clock_timer.stop()   # 按需启停（_sync_clock_timer）
         self._geo_timer = QTimer(self, singleShot=True, interval=600,
                                  timeout=self.save_geometry)
-        # 桌面层体检：Explorer 崩溃/重启导致 WorkerW 重建后自动恢复嵌入
-        self._embed_check = QTimer(self, interval=5000, timeout=self._embed_health)
-        self._embed_check.start()
-        self._expect_visible = True   # 窗口应显示状态（用于体检时区分用户隐藏）
-        self._native_hwnd = 0
         self._update_clock()
         self._tick()
 
@@ -598,116 +602,12 @@ class FloatWindow(QWidget):
 
     def showEvent(self, e):
         super().showEvent(e)
-        self._expect_visible = True
-        self._track_native()
         apply_frosted(self, self.t)
         self._sync_clock_timer()
-        self._ensure_desktop_embed()
 
     def hideEvent(self, e):
         super().hideEvent(e)
         self._sync_clock_timer()
-
-    def set_user_hidden(self, hidden: bool):
-        """记录用户主动隐藏（托盘/快捷键），体检恢复时尊重该状态。"""
-        self._expect_visible = not hidden
-
-    def _embed_health(self):
-        """5s 体检：桌面层嵌入已禁用——本机视频壁纸环境与 WorkerW 嵌入冲突
-        （嵌入后窗口被压缩为窄条且不可见），保持普通悬浮窗（1.2.1 行为）。"""
-        return
-        # ---- 以下为原嵌入逻辑（保留代码备查，不再执行） ----
-        if self.app.config.get("window", "topmost"):
-            return
-        try:
-            hwnd = getattr(self, "_native_hwnd", 0)
-            if not self._native_alive() \
-                    or (self._expect_visible and hwnd
-                        and not self._native_visible(hwnd)):
-                # 原生窗口被销毁，或"应可见却隐藏"（Qt 在原生窗口被外部
-                # 销毁后会静默重建一个隐藏的代理窗口，winId() 指向它，
-                # 导致 IsWindow 误判存活）→ 一律走重建路径
-                self._revive_window()
-                return
-            if not self._expect_visible:
-                return
-            if not self.isVisible():
-                self.show()
-            if shell_tray_alive() and not embed_to_desktop_if_needed(self):
-                log.info("桌面嵌入失败，将在下轮体检重试")
-            return
-        except Exception:
-            pass
-
-    def _ensure_desktop_embed(self):
-        """桌面嵌入已禁用——本机视频壁纸环境与 WorkerW 嵌入冲突
-        （嵌入后窗口被压缩为窄条且不可见），保持普通悬浮窗。"""
-        return
-        # ---- 以下为原嵌入逻辑（保留代码备查，不再执行） ----
-        if self.app.config.get("window", "topmost"):
-            return
-        try:
-            if not self._native_alive():
-                self._revive_window()
-                return
-            if not self.isVisible():
-                return
-            embed_to_desktop_if_needed(self)
-        except Exception:
-            pass
-
-    def _native_alive(self) -> bool:
-        """用上次记录的原生句柄判断窗口是否存活。
-        不能直接调 winId()：Qt 在窗口被外部销毁后会静默重建一个隐藏的
-        原生窗口并返回新句柄，导致检测不到 Explorer 崩溃。"""
-        hwnd = getattr(self, "_native_hwnd", 0)
-        if not hwnd:
-            return True
-        try:
-            return bool(ctypes.windll.user32.IsWindow(hwnd))
-        except Exception:
-            return True
-
-    def _native_visible(self, hwnd) -> bool:
-        """原生窗口是否可见（Qt 的 isVisible 不感知外部 ShowWindow 隐藏）。"""
-        try:
-            return bool(ctypes.windll.user32.IsWindowVisible(
-                wintypes.HWND(hwnd)))
-        except Exception:
-            return True
-
-    def _track_native(self):
-        try:
-            self._native_hwnd = int(self.winId())
-        except Exception:
-            pass
-
-    def _revive_window(self):
-        """桌面层原生窗口随 Explorer 一起被系统销毁后重建。
-        Qt 6.11 不会自动重建外部销毁的原生窗口（winId() 返回失效句柄、
-        show() 空转），正确路径是销毁 QWindow 后重新 show。"""
-        if getattr(self, "_reviving", False) or not self._expect_visible:
-            return
-        self._reviving = True
-        log.info("桌面层原生窗口已销毁（Explorer 重启），正在重建…")
-        try:
-            wh = self.windowHandle()
-            if wh is not None:
-                wh.destroy()
-            self.show()
-            # Qt 重建窗口不会恢复配置里的位置，主动恢复（否则每次 Explorer 崩溃都会漂移）
-            w = self.app.config.get("window")
-            if w and w.get("x") is not None and w.get("y") is not None:
-                self.move(int(w["x"]), int(w["y"]))
-            wh = self.windowHandle()
-            if wh is not None:
-                wh.show()
-            self._track_native()
-            # 嵌入交给下一次体检，避免重建当帧立即 SetParent 触发异常
-        except Exception:
-            log.error("窗口重建失败:\n" + traceback.format_exc())
-        finally:
-            self._reviving = False
 
     # ---------------- DIY 背景模式
     def apply_diy_bg(self, cfg: dict):
@@ -955,7 +855,6 @@ class FloatWindow(QWidget):
     def _do_rebuild(self):
         # 清空
         self._rows = []
-        self._group_headers = {}
         self.expanded = {k: v for k, v in self.expanded.items()
                          if k.startswith(("y", "m")) or k in ("recur", "link")}
         while self.content_lay.count():
@@ -1118,30 +1017,11 @@ class FloatWindow(QWidget):
         if header is not None:
             header.refresh_arrow()
 
-    def _add_recur_section(self, recurs):
-        key = "recur"
-        r_open = self.expanded.get(key, True)
-        self.expanded[key] = r_open
-        header = GroupHeader(self, tr("🔁 循环任务"), key)
-        self._group_headers[key] = header
-        self.content_lay.addWidget(header)
-        cont = QWidget()
-        lay = QVBoxLayout(cont)
-        lay.setContentsMargins(10, 0, 0, 2)
-        lay.setSpacing(1)
-        for it in self._manual_sorted(self._sorted_items(recurs, True)):
-            row = ItemRow(self, it, key)
-            self._rows.append(row)
-            lay.addWidget(row)
-        cont.setProperty("group_key", key)
-        self.content_lay.addWidget(cont)
-        cont.setVisible(r_open)
-
-    def _add_link_section(self, links):
-        key = "link"
-        l_open = self.expanded.get(key, True)
-        self.expanded[key] = l_open
-        header = GroupHeader(self, tr("🔗 网址直达"), key)
+    def _add_section(self, key: str, title: str, items: list):
+        """通用分组区：循环任务/网址直达（组头 + 容器，就地显隐）。"""
+        open_state = self.expanded.get(key, True)
+        self.expanded[key] = open_state
+        header = GroupHeader(self, title, key)
         self._group_headers[key] = header
         self.content_lay.addWidget(header)
         cont = QWidget()
@@ -1149,13 +1029,19 @@ class FloatWindow(QWidget):
         lay.setContentsMargins(10, 0, 0, 2)
         lay.setSpacing(1)
         for it in self._manual_sorted(
-                sorted(links, key=lambda i: i.get("created", ""), reverse=True)):
+                self._sorted_items(items, key == "recur")):
             row = ItemRow(self, it, key)
             self._rows.append(row)
             lay.addWidget(row)
         cont.setProperty("group_key", key)
         self.content_lay.addWidget(cont)
-        cont.setVisible(l_open)
+        cont.setVisible(open_state)
+
+    def _add_recur_section(self, recurs):
+        self._add_section("recur", tr("🔁 循环任务"), recurs)
+
+    def _add_link_section(self, links):
+        self._add_section("link", tr("🔗 网址直达"), links)
 
     def _manual_sorted(self, items):
         """已手动拖拽排序的按 order 在前，未排序的保持原时间序在后。"""

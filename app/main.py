@@ -10,7 +10,7 @@ import sys
 import traceback
 from datetime import timedelta
 
-from PySide6.QtCore import QLockFile, QObject, Qt, QTimer
+from PySide6.QtCore import QLockFile, QObject, QTimer
 from PySide6.QtGui import QCursor, QGuiApplication, QIcon
 from PySide6.QtWidgets import (QApplication, QDialog, QSystemTrayIcon)
 
@@ -57,9 +57,9 @@ class App(QObject):
         self._build_hotkeys()
         self.reload_hotkeys()
 
-        # 提醒定时器
+        # 提醒定时器（20s 周期：行内时间刷新 + 提醒检查，单一定时器）
         self.remind_timer = QTimer(self, interval=20000,
-                                   timeout=self.check_reminders)
+                                   timeout=self._periodic_tick)
         self.remind_timer.start()
         self.refresh_priorities()
 
@@ -175,9 +175,7 @@ class App(QObject):
     def toggle_visible(self):
         if self.win.isVisible():
             self.win.hide()
-            self.win.set_user_hidden(True)
         else:
-            self.win.set_user_hidden(False)
             self.win.show()
             if not self.config.get("window", "topmost"):
                 self.win.raise_()
@@ -480,13 +478,22 @@ class App(QObject):
         if due:
             self.win.refresh()
 
+    def _periodic_tick(self):
+        """20s 周期：行内时间刷新（原 main_window 的 20s 定时器合并至此）
+        + 提醒检查（含优先级刷新），常驻后台仅一个 20s 定时器。"""
+        self.win._tick()
+        self.check_reminders()
+
     def refresh_priorities(self):
         changed = False
         for it in self.store.items:
-            p = core.auto_priority(it)
-            if it.get("priority") != p:
-                it["priority"] = p
-                changed = True
+            # 自动优先级只对「未完成且设了截止时间」的待办有意义，收窄扫描
+            if it.get("type") == "todo" and not it.get("done") \
+                    and it.get("deadline"):
+                p = core.auto_priority(it)
+                if it.get("priority") != p:
+                    it["priority"] = p
+                    changed = True
         if changed:
             self.store.save()
             self.win.refresh()
@@ -527,34 +534,35 @@ class App(QObject):
                 item["done"] = True
                 item["notified_for"] = item.get("remind_time")
                 log.info(f"提醒中完成: {item['title']}")
+                self.store.save()
             elif act == "snooze":
                 self.snoozed[item["id"]] = core.now() + timedelta(minutes=mins)
                 log.info(f"稍后提醒({mins}分钟): {item['title']}")
+                return   # 仅内存状态，无需落盘
             else:  # close：本次提醒已处理，不再重复弹出
                 item["notified_for"] = item.get("remind_time")
-            self.store.save()
-            self.win.highlight_id = None
-            self.win.refresh()
-            return
-        key = item["deadline"] if item["type"] == "todo" else core.pending_instance(item)
-        if act == "done":
-            if item["type"] == "todo":
-                item["done"] = True
-                item["priority"] = core.auto_priority(item)
-                log.info(f"提醒中完成待办: {item['title']}")
-            else:
-                pend = core.pending_instance(item)
-                if pend:
-                    item.setdefault("completed_instances", []).append(pend)
-                    log.info(f"提醒中完成循环当期: {item['title']} @ {pend}")
-            item["notified_for"] = key
-            self.store.save()
-        elif act == "snooze":
-            self.snoozed[item["id"]] = core.now() + timedelta(minutes=mins)
-            log.info(f"稍后提醒({mins}分钟): {item['title']}")
-        else:  # close
-            item["notified_for"] = key
-            self.store.save()
+                self.store.save()
+        else:
+            key = item["deadline"] if item["type"] == "todo" else core.pending_instance(item)
+            if act == "done":
+                if item["type"] == "todo":
+                    item["done"] = True
+                    item["priority"] = core.auto_priority(item)
+                    log.info(f"提醒中完成待办: {item['title']}")
+                else:
+                    pend = core.pending_instance(item)
+                    if pend:
+                        item.setdefault("completed_instances", []).append(pend)
+                        log.info(f"提醒中完成循环当期: {item['title']} @ {pend}")
+                item["notified_for"] = key
+                self.store.save()
+            elif act == "snooze":
+                self.snoozed[item["id"]] = core.now() + timedelta(minutes=mins)
+                log.info(f"稍后提醒({mins}分钟): {item['title']}")
+                return
+            else:  # close
+                item["notified_for"] = key
+                self.store.save()
         self.win.highlight_id = None
         self.win.refresh()
 
