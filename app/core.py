@@ -210,7 +210,8 @@ class Config:
 
 # ---------------------------------------------------------------- 数据存储
 PRIORITIES = {"high": "高", "mid": "中", "low": "低"}
-PERIODS = {"day": "每天", "week": "每周", "month": "每月", "quarter": "每季", "year": "每年"}
+PERIODS = {"day": "每天", "week": "每周", "month": "每月", "quarter": "每季",
+           "year": "每年", "long": "长期"}
 TYPE_NAMES = {"record": "工作记录", "todo": "待办事项", "recur": "循环任务",
               "remind": "提醒", "link": "网址直达"}
 
@@ -345,9 +346,11 @@ def _at(d, hh, mm) -> datetime:
 
 
 def next_occur(item: dict, after: datetime) -> datetime:
-    """下一次提醒时间（严格晚于 after）。"""
+    """下一次提醒时间（严格晚于 after）；长期任务无循环，返回 None。"""
     r = item.get("recur") or {}
     period = r.get("period", "day")
+    if period == "long":
+        return None
     hh, mm = _recur_time(item)
     created = parse_dt(item.get("created")) or now()
     if period == "day":
@@ -397,6 +400,8 @@ def prev_occur(item: dict, before: datetime) -> datetime | None:
         return None
     r = item.get("recur") or {}
     period = r.get("period", "day")
+    if period == "long":
+        return None
     hh, mm = _recur_time(item)
     if period == "day":
         cand = _at(before, hh, mm)
@@ -444,6 +449,8 @@ def pending_instance(item: dict, t: datetime | None = None) -> str | None:
 def recur_desc(item: dict) -> str:
     r = item.get("recur") or {}
     period = r.get("period", "day")
+    if period == "long":
+        return tr("长期")
     t = r.get("time", "09:00")
     en = current_lang() == "en"
     if period == "week":

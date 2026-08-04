@@ -24,6 +24,7 @@ _TRANSLATIONS = {
     # ---------------- 通用按钮 / 提示 ----------------
     "确定": "OK",
     "取消": "Cancel",
+    "长期": "Long-term",
     "去设置": "Go to Settings",
     "父目录不存在，请先设置正确的父目录": "Base folder does not exist. Please set a valid one first",
     "父目录不可用": "Base folder unavailable",

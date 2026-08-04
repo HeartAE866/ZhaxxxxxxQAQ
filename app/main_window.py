@@ -973,8 +973,10 @@ class FloatWindow(_EdgeResizableMixin, QWidget):
 
     def _sorted_items(self, items, is_recur):
         if is_recur:
+            # 长期任务无下一次提醒：排到循环任务末尾
             return sorted(items, key=lambda i: core.dt_str(
-                core.next_occur(i, core.now())))
+                core.next_occur(i, core.now())
+                or datetime(9999, 1, 1)))
         todos = sorted((i for i in items if i["type"] == "todo"),
                        key=lambda i: (i.get("done", False), i.get("order", 0)))
         records = sorted((i for i in items if i["type"] == "record"),

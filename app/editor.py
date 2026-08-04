@@ -292,6 +292,8 @@ class ItemEditDialog(FramelessDialog):
 
     def _period_changed(self):
         p = self.period.currentData()
+        # 长期：无周期、无提醒时间，隐藏全部时间/星期/日期行
+        self.time_row.setVisible(p != "long")
         self.week_row.setVisible(p == "week")
         self.day_row.setVisible(p in ("month", "quarter"))
         self.ym_row.setVisible(p == "year")
@@ -348,15 +350,18 @@ class ItemEditDialog(FramelessDialog):
             it["remind_advance"] = None if adv == -1 else adv
         if self.item_type == "recur":
             p = self.period.currentData()
-            r = {"period": p, "time": f"{self.recur_hour.currentText()}:{self.recur_min.currentText()}"}
-            if p == "week":
-                r["weekday"] = self.weekday.currentData()
-            if p in ("month", "quarter"):
-                r["monthday"] = int(self.monthday.currentText())
-            if p == "year":
-                r["month"] = int(self.month.currentText())
-                r["monthday"] = int(self.monthday.currentText())
-            it["recur"] = r
+            if p == "long":
+                it["recur"] = {"period": "long"}
+            else:
+                r = {"period": p, "time": f"{self.recur_hour.currentText()}:{self.recur_min.currentText()}"}
+                if p == "week":
+                    r["weekday"] = self.weekday.currentData()
+                if p in ("month", "quarter"):
+                    r["monthday"] = int(self.monthday.currentText())
+                if p == "year":
+                    r["month"] = int(self.month.currentText())
+                    r["monthday"] = int(self.monthday.currentText())
+                it["recur"] = r
         if self.item_type != "link":
             p = self.priority.currentData()
             it["priority"] = core.auto_priority(it) if p == "auto" else p
