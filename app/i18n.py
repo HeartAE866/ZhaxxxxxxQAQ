@@ -25,6 +25,7 @@ _TRANSLATIONS = {
     "确定": "OK",
     "取消": "Cancel",
     "去设置": "Go to Settings",
+    "父目录不存在，请先设置正确的父目录": "Base folder does not exist. Please set a valid one first",
     "父目录不可用": "Base folder unavailable",
     "设置的父目录不存在或无法访问：\n{path}\n\n请到「设置 → 文件夹」中设置正确的父目录。":
         "The configured base folder does not exist or is inaccessible:\n{path}\n\n"

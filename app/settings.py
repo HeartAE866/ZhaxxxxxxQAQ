@@ -580,6 +580,7 @@ class SettingsWindow(FramelessDialog):
         row = QHBoxLayout()
         self.base_edit = QLineEdit(self.app.config.get("base_folder",
                                                        default=core.DEFAULT_BASE_FOLDER))
+        self.base_edit.editingFinished.connect(self._save_base_edit)
         row.addWidget(self.base_edit, 1)
         btn = QPushButton(tr("浏览…"))
         btn.clicked.connect(self._browse_base)
@@ -587,8 +588,7 @@ class SettingsWindow(FramelessDialog):
         lay.addLayout(row)
 
         btn_open = QPushButton(tr("打开父目录"))
-        btn_open.clicked.connect(lambda: core.open_folder(
-            self.app.config.get("base_folder", default=core.DEFAULT_BASE_FOLDER)))
+        btn_open.clicked.connect(self._open_base)
         lay.addWidget(btn_open)
 
         # ---- 平行生成规则管理（多条规则，创建事项时自主选用）
@@ -891,6 +891,22 @@ class SettingsWindow(FramelessDialog):
             return
         base = self.app.config.get("base_folder", default=core.DEFAULT_BASE_FOLDER)
         core.open_folder(core.ensure_custom_folder(base, name))
+
+    def _save_base_edit(self):
+        """父目录手动输入：编辑完成（回车/失焦）即保存，避免改不回来。"""
+        d = (self.base_edit.text() or "").strip()
+        if d:
+            self.app.config.set("base_folder", d)
+            core.log.info(f"修改父目录: {d}")
+            self._reload_rule_tree()
+
+    def _open_base(self):
+        self._save_base_edit()
+        base = self.app.config.get("base_folder", default=core.DEFAULT_BASE_FOLDER)
+        if not os.path.isdir(base):
+            Toast.show_text(tr("父目录不存在，请先设置正确的父目录"))
+            return
+        core.open_folder(base)
 
     def _browse_base(self):
         d = QFileDialog.getExistingDirectory(self, tr("选择父目录"),
