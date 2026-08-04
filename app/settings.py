@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """设置窗口：个性化 / 文件夹 / 提醒 / 快捷键 / 数据管理 / 日志 / 关于。"""
 from __future__ import annotations
 
@@ -168,7 +168,7 @@ class SettingsWindow(FramelessDialog):
                                          objectName="ThemeToggle")
         self.rb_settings_theme = QPushButton(tr("⚙ 设置栏主题"), checkable=True,
                                              objectName="ThemeToggle")
-        self.rb_compact_theme = QPushButton(tr("⏱ 紧凑模式"), checkable=True,
+        self.rb_compact_theme = QPushButton(tr("⏱ 紧凑模式主题"), checkable=True,
                                             objectName="ThemeToggle")
         self._theme_group = QButtonGroup(self)
         self._theme_group.setExclusive(True)
@@ -334,7 +334,8 @@ class SettingsWindow(FramelessDialog):
             self.app.restart()
 
     def _target_changed(self, kind):
-        if self._kind == kind:
+        if self._kind == kind and (not hasattr(self, "_personal_stack")
+                                   or self._personal_stack.currentIndex() == 0):
             return
         self._kind = kind
         self._edit = self.app.config.get(kind)
@@ -794,15 +795,68 @@ class SettingsWindow(FramelessDialog):
         row.addWidget(self._compact_alpha_lbl)
         lay.addLayout(row)
 
+        # 界面字体
+        frow = QHBoxLayout()
+        frow.addWidget(QLabel(tr("界面字体")))
+        self._compact_family = QComboBox()
+        self._compact_family.addItems(QFontDatabase.families())
+        self._compact_family.setCurrentText(
+            self._compact_cfg.get("font_family") or self._edit.get("font_family", "Microsoft YaHei UI"))
+        self._compact_family.currentTextChanged.connect(self._compact_save)
+        frow.addWidget(self._compact_family, 1)
+        lay.addLayout(frow)
+
+        # 字号（滑条，0=跟随主题）
         row = QHBoxLayout()
         row.addWidget(QLabel(tr("文字大小（0=跟随主题）")))
-        self._compact_font = QSpinBox()
-        self._compact_font.setRange(0, 48)
-        self._compact_font.setValue(int(self._compact_cfg.get("font_size") or 0))
+        self._compact_font = QSlider(Qt.Horizontal, minimum=0, maximum=48,
+                                     value=int(self._compact_cfg.get("font_size") or 0))
         self._compact_font.valueChanged.connect(self._compact_save)
-        row.addWidget(self._compact_font)
-        row.addStretch()
+        row.addWidget(self._compact_font, 1)
+        self._compact_font_lbl = QLabel(str(self._compact_font.value()))
+        self._compact_font.valueChanged.connect(
+            lambda v: self._compact_font_lbl.setText(str(v)))
+        row.addWidget(self._compact_font_lbl)
         lay.addLayout(row)
+
+        # ---- 紧凑 DIY 背景模式（与主题 DIY 同形式）
+        diysep = QLabel(tr("紧凑 DIY 背景模式"))
+        diysep.setStyleSheet(f"font-weight:bold;margin-top:10px;color:{self.t['accent']};")
+        lay.addWidget(diysep)
+        self._compact_diy_chk = QCheckBox(
+            tr("开启紧凑 DIY 背景（自定义紧凑条背景，样式区的背景色/图自动失效）"))
+        self._compact_diy_chk.setChecked(
+            bool((self._compact_cfg.get("diy") or {}).get("enabled")))
+        self._compact_diy_chk.toggled.connect(self._compact_diy_toggled)
+        lay.addWidget(self._compact_diy_chk)
+        self._compact_diy_box = QWidget()
+        dbox = QVBoxLayout(self._compact_diy_box)
+        dbox.setContentsMargins(0, 0, 0, 0)
+        drow = QHBoxLayout()
+        drow.addWidget(QLabel(tr("紧凑条背景")))
+        diy_comp = (self._compact_cfg.get("diy") or {}).get("components", {}) \
+            .get("compact") or {}
+        self._compact_diy_color_btn = QPushButton(fixedWidth=56, fixedHeight=24)
+        self._compact_diy_color_btn.setStyleSheet(
+            f"background-color:{diy_comp.get('color') or '#ffffff'};"
+            f"border:1px solid rgba(128,128,128,120);border-radius:5px;")
+        self._compact_diy_color_btn.clicked.connect(self._compact_diy_pick_color)
+        drow.addWidget(self._compact_diy_color_btn)
+        self._compact_diy_img_btn = QPushButton(tr("图片"))
+        self._compact_diy_img_btn.clicked.connect(self._compact_diy_pick_image)
+        drow.addWidget(self._compact_diy_img_btn)
+        self._compact_diy_alpha = QSlider(Qt.Horizontal, minimum=0, maximum=100,
+                                          value=int(diy_comp.get("alpha", 100)),
+                                          fixedWidth=110)
+        self._compact_diy_alpha.valueChanged.connect(self._compact_diy_alpha_changed)
+        drow.addWidget(self._compact_diy_alpha)
+        self._compact_diy_clear_btn = QPushButton(tr("清除"))
+        self._compact_diy_clear_btn.clicked.connect(self._compact_diy_clear)
+        drow.addWidget(self._compact_diy_clear_btn)
+        drow.addStretch()
+        dbox.addLayout(drow)
+        lay.addWidget(self._compact_diy_box)
+        self._compact_diy_box.setVisible(self._compact_diy_chk.isChecked())
 
         tip = QLabel(tr("提示：长按紧凑条可拖动，点击展开常规模式，边缘可横向缩放"))
         tip.setWordWrap(True)
@@ -841,10 +895,61 @@ class SettingsWindow(FramelessDialog):
         self._compact_save()
         self._refresh_cache_size()
 
+    def _compact_diy_cfg(self):
+        diy = self._compact_cfg.setdefault("diy", {})
+        diy.setdefault("components", {})
+        diy["components"].setdefault("compact", {})
+        return diy["components"]["compact"]
+
+    def _compact_diy_save(self):
+        self._compact_cfg["diy"]["enabled"] = self._compact_diy_chk.isChecked()
+        self._compact_save()
+
+    def _compact_diy_toggled(self, checked):
+        self._compact_diy_box.setVisible(checked)
+        self._compact_diy_save()
+
+    def _compact_diy_pick_color(self):
+        c = ColorDialog.get_color(self, self.t, QColor("#ffffff"), with_alpha=True)
+        if c:
+            self._compact_diy_cfg().update(color=c.name(), image="")
+            self._compact_diy_color_btn.setStyleSheet(
+                f"background-color:{c.name()};"
+                f"border:1px solid rgba(128,128,128,120);border-radius:5px;")
+            self._compact_diy_save()
+
+    def _compact_diy_pick_image(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, tr("选择背景图片"), "", tr("图片文件") + " (*.png *.jpg *.jpeg *.bmp *.webp)")
+        if path:
+            saved = core.save_theme_image(path)
+            if saved:
+                old = self._compact_diy_cfg().get("image")
+                self._compact_diy_cfg().update(image=saved, color="")
+                core.remove_theme_image_if_unused(old, self.app.config.data)
+                self._refresh_cache_size()
+                self._compact_diy_save()
+
+    def _compact_diy_alpha_changed(self, v):
+        self._compact_diy_cfg()["alpha"] = v
+        self._compact_diy_save()
+
+    def _compact_diy_clear(self):
+        old = self._compact_diy_cfg().get("image")
+        self._compact_diy_cfg().clear()
+        self._compact_diy_cfg().update(alpha=100)
+        self._compact_diy_color_btn.setStyleSheet(
+            "background-color:#ffffff;border:1px solid rgba(128,128,128,120);"
+            "border-radius:5px;")
+        core.remove_theme_image_if_unused(old, self.app.config.data)
+        self._refresh_cache_size()
+        self._compact_diy_save()
+
     def _compact_save(self, *_):
         comps = [key for box, key in self._compact_boxes if box.isChecked()]
         self._compact_cfg["components"] = comps
         self._compact_cfg["font_size"] = self._compact_font.value()
+        self._compact_cfg["font_family"] = self._compact_family.currentText()
         self._compact_cfg["bg_alpha"] = self._compact_alpha.value()
         self.app.config.set("compact_style", dict(self._compact_cfg))
         win = getattr(self.app, "win", None)
@@ -1764,3 +1869,4 @@ class SettingsWindow(FramelessDialog):
             logo.setPixmap(pm.scaledToWidth(96, Qt.SmoothTransformation))
             bottom.addWidget(logo, alignment=Qt.AlignBottom)
         lay.addLayout(bottom)
+

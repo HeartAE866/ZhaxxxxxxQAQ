@@ -271,7 +271,10 @@ DEFAULT_CONFIG = {
         "bg_color": "",
         "bg_image": "",
         "bg_alpha": 100,
+        "font_family": "",
         "font_size": 0,
+        "diy": {"enabled": False,
+                "components": {"compact": {"color": "", "image": "", "alpha": 100}}},
     },
     "hotkeys": {
         "settings": ["ctrl", "shift", "z", "x"],

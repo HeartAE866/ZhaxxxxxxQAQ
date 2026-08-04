@@ -770,21 +770,33 @@ class FloatWindow(_EdgeResizableMixin, QWidget):
         return parts
 
     def _apply_compact_style(self):
-        """应用紧凑模式样式：文字颜色/字号（0=跟随主题）、背景色/图片/透明度。"""
+        """应用紧凑模式样式：文字颜色/字号/字体（0=跟随主题）、背景色/图片/透明度、
+        DIY 背景优先。"""
         cfg = self.app.config.get("compact_style", default={})
         ss = []
         if cfg.get("text_color"):
             ss.append(f"color:{cfg['text_color']};")
         fs = cfg.get("font_size") or self.t.get("font_size", 10)
         ss.append(f"font-size:{fs}pt;")
+        fam = cfg.get("font_family")
+        if not fam:
+            fam = self.t.get("font_family", "")
+        if fam:
+            ss.append(f"font-family:'{fam}';")
         self.compact_lbl.setStyleSheet("".join(ss))
-        alpha = int(cfg.get("bg_alpha", 100))
-        if cfg.get("bg_image") and os.path.exists(cfg["bg_image"]):
-            self.compact_bar.set_bg("", cfg["bg_image"], alpha)
-        elif cfg.get("bg_color"):
-            self.compact_bar.set_bg(cfg["bg_color"], "", alpha)
+        diy = cfg.get("diy") or {}
+        if diy.get("enabled"):
+            c = (diy.get("components") or {}).get("compact") or {}
+            self.compact_bar.set_bg(c.get("color") or "", c.get("image") or "",
+                                    int(c.get("alpha", 100)))
         else:
-            self.compact_bar.set_bg("", "", 100)
+            alpha = int(cfg.get("bg_alpha", 100))
+            if cfg.get("bg_image") and os.path.exists(cfg["bg_image"]):
+                self.compact_bar.set_bg("", cfg["bg_image"], alpha)
+            elif cfg.get("bg_color"):
+                self.compact_bar.set_bg(cfg["bg_color"], "", alpha)
+            else:
+                self.compact_bar.set_bg("", "", 100)
 
     def _update_compact_text(self):
         parts = self._compact_parts()
