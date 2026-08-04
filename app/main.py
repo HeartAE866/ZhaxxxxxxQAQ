@@ -386,12 +386,12 @@ class App(QObject):
                     .replace("{path}", str(base)),
                     ok_text=tr("去设置"))
                 if ok:
-                    self.show_settings()
+                    self.show_settings(page="folder")
                 return
         core.open_folder(folder)
 
     # ---------------------------------------------------------------- 设置 / 主题
-    def show_settings(self):
+    def show_settings(self, page=None):
         from settings import SettingsWindow
         if self.settings_win is None:
             self.settings_win = SettingsWindow(self)
@@ -399,6 +399,8 @@ class App(QObject):
         self.settings_win.show()
         self.settings_win.raise_()
         self.settings_win.activateWindow()
+        if page == "folder":
+            self.settings_win.goto_folder_page()
 
     def _settings_closed(self, *_):
         self.settings_win = None

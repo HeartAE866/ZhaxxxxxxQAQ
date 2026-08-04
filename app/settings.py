@@ -56,6 +56,13 @@ class SettingsWindow(FramelessDialog):
         # 设置窗内 DIY 背景需实时生效：可见期间保持 500ms 轮询
         self._diy_timer.start()
 
+    def goto_folder_page(self):
+        """定位到「文件夹」页（父目录设置入口）。"""
+        for i in range(self.nav.count()):
+            if self.nav.item(i).text() == tr("📁 文件夹"):
+                self.nav.setCurrentRow(i)
+                break
+
     def __init__(self, app):
         super().__init__(None, app.config.get("theme_settings"), tr("设置"),
                          width=880)
