@@ -156,7 +156,6 @@ DEFAULT_CONFIG = {
     "diy_bg": {"enabled": False, "image": "", "alpha": 120, "components": {}},
     "diy_bg_settings": {"enabled": False, "image": "", "alpha": 120, "components": {}},
     "folder_rules": {
-        "seeded_examples": True,
         "rules": [
             {"name": "默认规则", "levels": [
                 {"template": "{Y}年"},
@@ -183,26 +182,28 @@ class Config:
     def __init__(self, path=CONFIG_PATH):
         self.path = path
         self.data = json.loads(json.dumps(DEFAULT_CONFIG))
+        raw_rules = None
         if os.path.exists(path):
             try:
                 with open(path, "r", encoding="utf-8-sig") as f:
-                    self._merge(self.data, json.load(f))
+                    loaded = json.load(f)
+                    raw_rules = loaded.get("folder_rules")
+                    self._merge(self.data, loaded)
             except Exception:
                 log.error("读取 config.json 失败:\n" + traceback.format_exc())
-        self._migrate()
+        self._migrate(raw_rules)
 
-    def _migrate(self):
+    def _migrate(self, raw_rules=None):
         """旧版本配置升级。"""
         fr = self.data.get("folder_rules")
         if isinstance(fr, dict) and "levels" in fr:
             # v1.1.3 及以前：单条规则（无 rules 键）→ 转为规则列表
             fr["rules"] = [{"name": "默认规则", "levels": fr.pop("levels")}]
-        # 预置示例规则（帮助理解文件生成规则）——仅首次初始化一次，
-        # 用户自行删除示例后不再补回
+        # 预置示例规则（帮助理解文件生成规则）：当前规则中不含示例则补入
         if isinstance(fr, dict) and isinstance(fr.get("rules"), list) \
-                and not fr.get("seeded_examples"):
+                and not any("（示例）" in (r.get("name") or "")
+                            for r in fr["rules"]):
             fr["rules"].extend([dict(r) for r in EXAMPLE_FOLDER_RULES])
-            fr["seeded_examples"] = True
 
     def _merge(self, base: dict, extra: dict):
         for k, v in extra.items():
