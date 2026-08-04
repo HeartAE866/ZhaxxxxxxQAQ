@@ -24,6 +24,11 @@ _TRANSLATIONS = {
     # ---------------- 通用按钮 / 提示 ----------------
     "确定": "OK",
     "取消": "Cancel",
+    "去设置": "Go to Settings",
+    "父目录不可用": "Base folder unavailable",
+    "设置的父目录不存在或无法访问：\n{path}\n\n请到「设置 → 文件夹」中设置正确的父目录。":
+        "The configured base folder does not exist or is inaccessible:\n{path}\n\n"
+        "Please set a valid base folder in Settings → Folders.",
     "倒计时结束，请再次确认：确定执行该操作":
         "Countdown finished. Confirm again to proceed",
     "⚠ {n} 秒后可点击「{ok}」…": "⚠ Clickable in {n}s («{ok}»)…",

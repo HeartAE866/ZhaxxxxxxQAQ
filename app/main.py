@@ -368,12 +368,26 @@ class App(QObject):
         folder = item.get("folder")
         if not folder or not os.path.isdir(folder):
             base = self.config.get("base_folder", default=core.DEFAULT_BASE_FOLDER)
-            rules = self.config.get("folder_rules", default={})
-            idx = core.folder_rule_index(rules, item.get("folder_rule"))
-            folder = core.create_bound_folder(item, base, rules, rule_index=idx)
-            item["folder"] = folder
-            self.store.save()
-            self.win.refresh()
+            try:
+                if not os.path.isdir(base):
+                    raise OSError(f"父目录不存在: {base}")
+                rules = self.config.get("folder_rules", default={})
+                idx = core.folder_rule_index(rules, item.get("folder_rule"))
+                folder = core.create_bound_folder(item, base, rules, rule_index=idx)
+                item["folder"] = folder
+                self.store.save()
+                self.win.refresh()
+            except OSError:
+                # 父目录无效（路径不存在/盘符不存在/权限不足）：引导去设置修正
+                ok, _ = ConfirmDialog.ask(
+                    self.win, self.t, tr("父目录不可用"),
+                    tr("设置的父目录不存在或无法访问：\n{path}\n\n"
+                       "请到「设置 → 文件夹」中设置正确的父目录。")
+                    .replace("{path}", str(base)),
+                    ok_text=tr("去设置"))
+                if ok:
+                    self.show_settings()
+                return
         core.open_folder(folder)
 
     # ---------------------------------------------------------------- 设置 / 主题
