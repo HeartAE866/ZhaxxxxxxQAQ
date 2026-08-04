@@ -268,9 +268,6 @@ DEFAULT_CONFIG = {
     "compact_style": {
         "components": ["clock", "offwork", "urgent"],
         "text_color": "",
-        "bg_color": "",
-        "bg_image": "",
-        "bg_alpha": 100,
         "font_family": "",
         "font_size": 0,
         "diy": {"enabled": False,

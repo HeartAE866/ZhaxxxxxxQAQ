@@ -787,16 +787,11 @@ class FloatWindow(_EdgeResizableMixin, QWidget):
         diy = cfg.get("diy") or {}
         if diy.get("enabled"):
             c = (diy.get("components") or {}).get("compact") or {}
-            self.compact_bar.set_bg(c.get("color") or "", c.get("image") or "",
+            self.compact_bar.set_bg("", c.get("image") or "",
                                     int(c.get("alpha", 100)))
         else:
-            alpha = int(cfg.get("bg_alpha", 100))
-            if cfg.get("bg_image") and os.path.exists(cfg["bg_image"]):
-                self.compact_bar.set_bg("", cfg["bg_image"], alpha)
-            elif cfg.get("bg_color"):
-                self.compact_bar.set_bg(cfg["bg_color"], "", alpha)
-            else:
-                self.compact_bar.set_bg("", "", 100)
+            # 紧凑主题不再单独保存背景颜色/图片，未启用 DIY 时跟随主题背景。
+            self.compact_bar.set_bg("", "", 100)
 
     def _update_compact_text(self):
         parts = self._compact_parts()

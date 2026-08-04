@@ -509,29 +509,24 @@ class SettingsWindow(FramelessDialog):
             color = c.get("color") or ""
             image = c.get("image") or ""
             alpha = int(c.get("alpha", 100))
-            cb = QPushButton(tr("色") if color else tr("纯色"))
-            cb.setStyleSheet(self._diy_comp_style(color, ""))
-            cb.setToolTip(tr("点击设置背景色（与图片互斥）"))
-            cb.clicked.connect(lambda _=False, k=key: self._pick_diy_color(k))
-            self.diy_grid.addWidget(cb, i, 1)
             ib = QPushButton(tr("图") if image else tr("图片"))
             ib.setStyleSheet(self._diy_comp_style("", image))
-            ib.setToolTip(image or tr("点击选择背景图片（与纯色互斥）"))
+            ib.setToolTip(image or tr("点击选择背景图片"))
             ib.clicked.connect(lambda _=False, k=key: self._pick_diy_comp_image(k))
-            self.diy_grid.addWidget(ib, i, 2)
+            self.diy_grid.addWidget(ib, i, 1)
             sp = QSlider(Qt.Horizontal, minimum=0, maximum=100, value=alpha,
                          fixedWidth=110)
             sp.setToolTip(tr("部件背景不透明度：{n}").replace("{n}", str(alpha)))
             sp.valueChanged.connect(
                 lambda v, k=key, s=sp: (s.setToolTip(tr("部件背景不透明度：{n}").replace("{n}", str(v))),
                                         self._diy_comp_alpha(k, v)))
-            self.diy_grid.addWidget(sp, i, 3)
+            self.diy_grid.addWidget(sp, i, 2)
             cl = QPushButton(tr("清除"))
             cl.setFixedWidth(48)
             cl.setStyleSheet("padding:2px 6px;")
             cl.clicked.connect(lambda _=False, k=key: self._clear_diy_comp(k))
-            self.diy_grid.addWidget(cl, i, 4)
-            self._diy_btns[key] = (cb, ib)
+            self.diy_grid.addWidget(cl, i, 3)
+            self._diy_btns[key] = (None, ib)
 
     def _diy_comp_alpha(self, key, v):
         self._diy_update_comp(key, alpha=int(v))
@@ -751,49 +746,22 @@ class SettingsWindow(FramelessDialog):
         lay.addWidget(QLabel(tr("样式")))
         self._compact_btns = {}
 
-        def _color_row(label, key):
-            row = QHBoxLayout()
-            row.addWidget(QLabel(label))
-            btn = QPushButton()
-            btn.setFixedSize(64, 26)
-            btn.setStyleSheet(
-                f"background-color:{self._compact_cfg.get(key) or '#ffffff'};"
-                f"border:1px solid rgba(128,128,128,120);border-radius:5px;")
-            btn.clicked.connect(lambda: self._compact_pick(key, btn))
-            row.addWidget(btn)
-            btn_clear = QPushButton(tr("清除"))
-            btn_clear.clicked.connect(lambda: self._compact_clear_color(key, btn))
-            row.addWidget(btn_clear)
-            row.addStretch()
-            lay.addLayout(row)
-            self._compact_btns[key] = btn
-
-        _color_row(tr("文字颜色"), "text_color")
-        _color_row(tr("背景颜色"), "bg_color")
-
+        # 文字颜色
         row = QHBoxLayout()
-        row.addWidget(QLabel(tr("背景图片")))
-        btn_img = QPushButton(tr("浏览…"))
-        btn_img.clicked.connect(self._compact_pick_image)
-        row.addWidget(btn_img)
+        row.addWidget(QLabel(tr("文字颜色")))
+        btn = QPushButton()
+        btn.setFixedSize(64, 26)
+        btn.setStyleSheet(
+            f"background-color:{self._compact_cfg.get('text_color') or '#ffffff'};"
+            f"border:1px solid rgba(128,128,128,120);border-radius:5px;")
+        btn.clicked.connect(lambda: self._compact_pick("text_color", btn))
+        row.addWidget(btn)
         btn_clear = QPushButton(tr("清除"))
-        btn_clear.clicked.connect(lambda: self._compact_set_image(""))
+        btn_clear.clicked.connect(lambda: self._compact_clear_color("text_color", btn))
         row.addWidget(btn_clear)
         row.addStretch()
         lay.addLayout(row)
-
-        # 背景透明度（参考个性化：0-100）
-        row = QHBoxLayout()
-        row.addWidget(QLabel(tr("背景透明度")))
-        self._compact_alpha = QSlider(Qt.Horizontal, minimum=0, maximum=100,
-                                      value=int(self._compact_cfg.get("bg_alpha", 100)))
-        self._compact_alpha.valueChanged.connect(self._compact_save)
-        row.addWidget(self._compact_alpha, 1)
-        self._compact_alpha_lbl = QLabel(str(self._compact_alpha.value()))
-        self._compact_alpha.valueChanged.connect(
-            lambda v: self._compact_alpha_lbl.setText(str(v)))
-        row.addWidget(self._compact_alpha_lbl)
-        lay.addLayout(row)
+        self._compact_btns["text_color"] = btn
 
         # 界面字体
         frow = QHBoxLayout()
@@ -820,11 +788,11 @@ class SettingsWindow(FramelessDialog):
         lay.addLayout(row)
 
         # ---- 紧凑 DIY 背景模式（与主题 DIY 同形式）
-        diysep = QLabel(tr("紧凑 DIY 背景模式"))
+        diysep = QLabel(tr("DIY 背景模式"))
         diysep.setStyleSheet(f"font-weight:bold;margin-top:10px;color:{self.t['accent']};")
         lay.addWidget(diysep)
         self._compact_diy_chk = QCheckBox(
-            tr("开启紧凑 DIY 背景（自定义紧凑条背景，样式区的背景色/图自动失效）"))
+            tr("开启紧凑 DIY 背景（背景图片自定义紧凑条）"))
         self._compact_diy_chk.setChecked(
             bool((self._compact_cfg.get("diy") or {}).get("enabled")))
         self._compact_diy_chk.toggled.connect(self._compact_diy_toggled)
@@ -836,12 +804,6 @@ class SettingsWindow(FramelessDialog):
         drow.addWidget(QLabel(tr("紧凑条背景")))
         diy_comp = (self._compact_cfg.get("diy") or {}).get("components", {}) \
             .get("compact") or {}
-        self._compact_diy_color_btn = QPushButton(fixedWidth=56, fixedHeight=24)
-        self._compact_diy_color_btn.setStyleSheet(
-            f"background-color:{diy_comp.get('color') or '#ffffff'};"
-            f"border:1px solid rgba(128,128,128,120);border-radius:5px;")
-        self._compact_diy_color_btn.clicked.connect(self._compact_diy_pick_color)
-        drow.addWidget(self._compact_diy_color_btn)
         self._compact_diy_img_btn = QPushButton(tr("图片"))
         self._compact_diy_img_btn.clicked.connect(self._compact_diy_pick_image)
         drow.addWidget(self._compact_diy_img_btn)
@@ -881,20 +843,6 @@ class SettingsWindow(FramelessDialog):
                               f"border-radius:5px;")
             self._compact_save()
 
-    def _compact_pick_image(self):
-        path, _ = QFileDialog.getOpenFileName(
-            self, tr("选择背景图片"), "",
-            tr("图片文件") + " (*.png *.jpg *.jpeg *.bmp *.webp)")
-        if path:
-            self._compact_set_image(path)
-
-    def _compact_set_image(self, path):
-        old = self._compact_cfg.get("bg_image")
-        self._compact_cfg["bg_image"] = core.save_theme_image(path) if path else ""
-        core.remove_theme_image_if_unused(old, self.app.config.data)
-        self._compact_save()
-        self._refresh_cache_size()
-
     def _compact_diy_cfg(self):
         diy = self._compact_cfg.setdefault("diy", {})
         diy.setdefault("components", {})
@@ -908,15 +856,6 @@ class SettingsWindow(FramelessDialog):
     def _compact_diy_toggled(self, checked):
         self._compact_diy_box.setVisible(checked)
         self._compact_diy_save()
-
-    def _compact_diy_pick_color(self):
-        c = ColorDialog.get_color(self, self.t, QColor("#ffffff"), with_alpha=True)
-        if c:
-            self._compact_diy_cfg().update(color=c.name(), image="")
-            self._compact_diy_color_btn.setStyleSheet(
-                f"background-color:{c.name()};"
-                f"border:1px solid rgba(128,128,128,120);border-radius:5px;")
-            self._compact_diy_save()
 
     def _compact_diy_pick_image(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -938,9 +877,6 @@ class SettingsWindow(FramelessDialog):
         old = self._compact_diy_cfg().get("image")
         self._compact_diy_cfg().clear()
         self._compact_diy_cfg().update(alpha=100)
-        self._compact_diy_color_btn.setStyleSheet(
-            "background-color:#ffffff;border:1px solid rgba(128,128,128,120);"
-            "border-radius:5px;")
         core.remove_theme_image_if_unused(old, self.app.config.data)
         self._refresh_cache_size()
         self._compact_diy_save()
@@ -950,7 +886,6 @@ class SettingsWindow(FramelessDialog):
         self._compact_cfg["components"] = comps
         self._compact_cfg["font_size"] = self._compact_font.value()
         self._compact_cfg["font_family"] = self._compact_family.currentText()
-        self._compact_cfg["bg_alpha"] = self._compact_alpha.value()
         self.app.config.set("compact_style", dict(self._compact_cfg))
         win = getattr(self.app, "win", None)
         if win is not None:
