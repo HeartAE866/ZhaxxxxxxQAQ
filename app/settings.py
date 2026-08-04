@@ -673,7 +673,7 @@ class SettingsWindow(FramelessDialog):
         cur = select if select is not None else self.rule_combo.currentText()
         self.rule_combo.blockSignals(True)
         self.rule_combo.clear()
-        self.rule_combo.addItems([r.get("name") or f"规则{i + 1}"
+        self.rule_combo.addItems([tr(r.get("name") or f"规则{i + 1}")
                                   for i, r in enumerate(rl)])
         self.rule_combo.setCurrentIndex(max(0, self.rule_combo.findText(cur)))
         self.rule_combo.blockSignals(False)

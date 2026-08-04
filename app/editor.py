@@ -231,7 +231,7 @@ class ItemEditDialog(FramelessDialog):
             rules_list = core.folder_rules_list(
                 self.config.get("folder_rules", default={}) if self.config else {})
             for i, rule in enumerate(rules_list):
-                name = rule.get("name") or f"规则{i + 1}"
+                name = tr(rule.get("name") or f"规则{i + 1}")
                 self.folder_mode.addItem(
                     tr("按规则「{name}」创建").replace("{name}", name), f"rule:{i}")
             for name in ((self.config.get("custom_folders") if self.config else None) or []):

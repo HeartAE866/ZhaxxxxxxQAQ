@@ -122,6 +122,26 @@ def install_excepthook():
 from theme import DEFAULT_THEME, DEFAULT_THEMES, DEFAULT_THEME_SETTINGS  # noqa: E402
 from i18n import tr, current_lang  # noqa: E402
 
+# 示例文件夹生成规则（帮助用户理解命名种类与层级用法）
+EXAMPLE_FOLDER_RULES = [
+    {"name": "财务规则（示例）", "levels": [
+        {"template": "财务"},
+        {"template": "{Y}年"},
+        {"template": "{M}月"},
+        {"template": "{name}"},
+    ]},
+    {"name": "运营规则（示例）", "levels": [
+        {"template": "运营"},
+        {"template": "{Y}年"},
+        {"template": "{M}.{name}"},
+    ]},
+    {"name": "项目规则（示例）", "levels": [
+        {"template": "项目"},
+        {"template": "{name}"},
+        {"template": "{Y}年"},
+    ]},
+]
+
 DEFAULT_CONFIG = {
     "language": "en",
     "update": {"check": True, "ignored_version": "", "last_seen_changelog": "", "last_source": ""},
@@ -136,13 +156,14 @@ DEFAULT_CONFIG = {
     "diy_bg": {"enabled": False, "image": "", "alpha": 120, "components": {}},
     "diy_bg_settings": {"enabled": False, "image": "", "alpha": 120, "components": {}},
     "folder_rules": {
+        "seeded_examples": True,
         "rules": [
             {"name": "默认规则", "levels": [
                 {"template": "{Y}年"},
                 {"template": "{M}月"},
                 {"template": "{Y}.{M}.{D}{name}"},
             ]},
-        ],
+        ] + [dict(r) for r in EXAMPLE_FOLDER_RULES],
     },
     "show_recent_days": 7,
     "reminder": {"todo_enabled": True, "todo_advance_minutes": 0, "recur_enabled": True,
@@ -176,6 +197,12 @@ class Config:
         if isinstance(fr, dict) and "levels" in fr:
             # v1.1.3 及以前：单条规则（无 rules 键）→ 转为规则列表
             fr["rules"] = [{"name": "默认规则", "levels": fr.pop("levels")}]
+        # 预置示例规则（帮助理解文件生成规则）——仅首次初始化一次，
+        # 用户自行删除示例后不再补回
+        if isinstance(fr, dict) and isinstance(fr.get("rules"), list) \
+                and not fr.get("seeded_examples"):
+            fr["rules"].extend([dict(r) for r in EXAMPLE_FOLDER_RULES])
+            fr["seeded_examples"] = True
 
     def _merge(self, base: dict, extra: dict):
         for k, v in extra.items():
