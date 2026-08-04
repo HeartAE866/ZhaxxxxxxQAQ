@@ -93,6 +93,66 @@ def save_theme_image_data(data: str, name: str = "background.png") -> str:
         return ""
 
 
+def _collect_image_refs(config_data) -> set:
+    """收集所有主题配置中仍在引用的图片路径。"""
+    refs = set()
+
+    def walk(value):
+        if isinstance(value, dict):
+            for k, item in value.items():
+                if k in ("image", "bg_image") and isinstance(item, str) and item:
+                    refs.add(os.path.abspath(item))
+                else:
+                    walk(item)
+        elif isinstance(value, list):
+            for item in value:
+                walk(item)
+
+    for key in ("theme", "theme_settings", "diy_bg", "diy_bg_settings",
+                "compact_style", "saved_themes"):
+        walk(config_data.get(key))
+    return refs
+
+
+def theme_assets_size() -> int:
+    """主题图片缓存目录总字节数。"""
+    total = 0
+    for f in os.listdir(THEME_ASSET_DIR):
+        p = os.path.join(THEME_ASSET_DIR, f)
+        if os.path.isfile(p):
+            try:
+                total += os.path.getsize(p)
+            except OSError:
+                pass
+    return total
+
+
+def clean_theme_assets(config_data) -> int:
+    """删除未被任何主题配置引用的图片缓存，返回删除数量。"""
+    refs = _collect_image_refs(config_data)
+    removed = 0
+    for f in os.listdir(THEME_ASSET_DIR):
+        p = os.path.join(THEME_ASSET_DIR, f)
+        if os.path.isfile(p) and os.path.abspath(p) not in refs:
+            try:
+                os.remove(p)
+                removed += 1
+            except OSError:
+                pass
+    return removed
+
+
+def remove_theme_image_if_unused(path, config_data):
+    """删除单张图片缓存（未被任何配置引用时）。"""
+    if not path or not os.path.isfile(path):
+        return
+    if os.path.abspath(path) not in _collect_image_refs(config_data):
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+
 def now() -> datetime:
     return datetime.now().replace(second=0, microsecond=0)
 

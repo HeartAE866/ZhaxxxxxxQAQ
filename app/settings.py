@@ -168,28 +168,46 @@ class SettingsWindow(FramelessDialog):
                                          objectName="ThemeToggle")
         self.rb_settings_theme = QPushButton(tr("⚙ 设置栏主题"), checkable=True,
                                              objectName="ThemeToggle")
+        self.rb_compact_theme = QPushButton(tr("⏱ 紧凑模式"), checkable=True,
+                                            objectName="ThemeToggle")
         self._theme_group = QButtonGroup(self)
         self._theme_group.setExclusive(True)
         self._theme_group.addButton(self.rb_main_theme)
         self._theme_group.addButton(self.rb_settings_theme)
+        self._theme_group.addButton(self.rb_compact_theme)
         self.rb_settings_theme.setChecked(True)
         for b, kind in [(self.rb_main_theme, "theme"),
                         (self.rb_settings_theme, "theme_settings")]:
             b.toggled.connect(
                 lambda checked, k=kind: self._target_changed(k) if checked else None)
+        self.rb_compact_theme.toggled.connect(self._compact_target_changed)
         trow0.addWidget(self.rb_main_theme)
         trow0.addWidget(self.rb_settings_theme)
+        trow0.addWidget(self.rb_compact_theme)
         trow0.addStretch()
         lay.addLayout(trow0)
 
+        # 主题编辑区 与 紧凑模式设置区 堆叠切换
+        self._personal_stack = QStackedWidget()
+        theme_page = QWidget()
+        tlay = QVBoxLayout(theme_page)
+        tlay.setContentsMargins(0, 0, 0, 0)
+        compact_page = QWidget()
+        clay = QVBoxLayout(compact_page)
+        clay.setContentsMargins(0, 0, 0, 0)
+        self._personal_stack.addWidget(theme_page)
+        self._personal_stack.addWidget(compact_page)
+        lay.addWidget(self._personal_stack)
+        self._compact_page = compact_page
+
         self.color_hint = QLabel()
-        lay.addWidget(self.color_hint)
+        tlay.addWidget(self.color_hint)
         grid_w = QWidget()
         self._color_grid = QGridLayout(grid_w)
         self._color_grid.setHorizontalSpacing(14)
         self._color_btns = {}
         self._rebuild_color_grid()
-        lay.addWidget(grid_w)
+        tlay.addWidget(grid_w)
 
         # 字体
         frow = QHBoxLayout()
@@ -199,7 +217,7 @@ class SettingsWindow(FramelessDialog):
         self.font_combo.setCurrentText(self._edit.get("font_family", "Microsoft YaHei UI"))
         self.font_combo.currentTextChanged.connect(self._font_changed)
         frow.addWidget(self.font_combo, 1)
-        lay.addLayout(frow)
+        tlay.addLayout(frow)
 
         # 字号（滑条）
         srow = QHBoxLayout()
@@ -212,7 +230,7 @@ class SettingsWindow(FramelessDialog):
         self.font_size.valueChanged.connect(
             lambda v: self.font_size_lbl.setText(str(v)))
         srow.addWidget(self.font_size_lbl)
-        lay.addLayout(srow)
+        tlay.addLayout(srow)
 
         # 背景不透明度（0-100，映射到 0-255 存配置）
         orow = QHBoxLayout()
@@ -224,16 +242,26 @@ class SettingsWindow(FramelessDialog):
         self.alpha_lbl = QLabel(str(self.alpha_slider.value()))
         self.alpha_slider.valueChanged.connect(lambda v: self.alpha_lbl.setText(str(v)))
         orow.addWidget(self.alpha_lbl)
-        lay.addLayout(orow)
+        tlay.addLayout(orow)
 
         # ---- DIY 背景模式
         diysep = QLabel(tr("DIY 背景模式"))
         diysep.setStyleSheet(f"font-weight:bold;margin-top:10px;color:{self.t['accent']};")
-        lay.addWidget(diysep)
+        tlay.addWidget(diysep)
+        drow = QHBoxLayout()
         self.diy_chk = QCheckBox(
             tr("开启 DIY 背景模式（自定义每个部件的背景，原主题颜色自动失效）"))
         self.diy_chk.toggled.connect(self._diy_toggled)
-        lay.addWidget(self.diy_chk)
+        drow.addWidget(self.diy_chk)
+        btn_clean = QPushButton(tr("清理图片缓存"))
+        btn_clean.clicked.connect(self._clean_image_cache)
+        drow.addWidget(btn_clean)
+        self.cache_size_lbl = QLabel()
+        self.cache_size_lbl.setStyleSheet(f"color:{theme_mod.rgba(self.t['text'], 160)};")
+        drow.addWidget(self.cache_size_lbl)
+        drow.addStretch()
+        tlay.addLayout(drow)
+        self._refresh_cache_size()
 
         self.diy_box = QWidget()
         dbox = QVBoxLayout(self.diy_box)
@@ -247,7 +275,7 @@ class SettingsWindow(FramelessDialog):
         self._diy_btns = {}
         self._rebuild_diy_grid()
         dbox.addLayout(self.diy_grid)
-        lay.addWidget(self.diy_box)
+        tlay.addWidget(self.diy_box)
         self.diy_box.setVisible(False)
         self._sync_diy_ui()
 
@@ -261,10 +289,10 @@ class SettingsWindow(FramelessDialog):
         self.radius_lbl = QLabel(str(self.radius_slider.value()))
         self.radius_slider.valueChanged.connect(lambda v: self.radius_lbl.setText(str(v)))
         rrow.addWidget(self.radius_lbl)
-        lay.addLayout(rrow)
+        tlay.addLayout(rrow)
 
         # 主题预设与导入导出
-        lay.addWidget(QLabel(tr("主题")))
+        tlay.addWidget(QLabel(tr("主题")))
         trow = QHBoxLayout()
         self.theme_combo = QComboBox()
         self._refresh_theme_combo()
@@ -274,10 +302,10 @@ class SettingsWindow(FramelessDialog):
             b = QPushButton(tr(text))
             b.clicked.connect(fn)
             trow.addWidget(b)
-        lay.addLayout(trow)
+        tlay.addLayout(trow)
 
-        # 紧凑模式与两套主题并列放在个性化页
-        self._page_compact(lay)
+        # 紧凑模式设置区（与主题编辑区堆叠切换）
+        self._page_compact(clay)
 
         # 顶部时钟显示
         crow = QHBoxLayout()
@@ -287,7 +315,7 @@ class SettingsWindow(FramelessDialog):
         self.show_clock_chk.toggled.connect(self._show_clock_changed)
         crow.addWidget(self.show_clock_chk)
         crow.addStretch()
-        lay.addLayout(crow)
+        tlay.addLayout(crow)
 
     def _show_clock_changed(self, v):
         self.app.config.set("window", "show_clock", v)
@@ -310,7 +338,32 @@ class SettingsWindow(FramelessDialog):
             return
         self._kind = kind
         self._edit = self.app.config.get(kind)
+        if hasattr(self, "_personal_stack"):
+            self._personal_stack.setCurrentIndex(0)
         QTimer.singleShot(0, self._apply_target_change)
+
+    def _compact_target_changed(self, checked):
+        """紧凑模式按钮：切换到紧凑设置区。"""
+        if checked and hasattr(self, "_personal_stack"):
+            self._personal_stack.setCurrentIndex(1)
+
+    def _fmt_size(self, n: int) -> str:
+        if n >= 1024 * 1024:
+            return f"{n / 1024 / 1024:.1f} MB"
+        if n >= 1024:
+            return f"{n / 1024:.0f} KB"
+        return f"{n} B"
+
+    def _refresh_cache_size(self):
+        if hasattr(self, "cache_size_lbl"):
+            self.cache_size_lbl.setText(
+                tr("图片缓存：{size}").replace(
+                    "{size}", self._fmt_size(core.theme_assets_size())))
+
+    def _clean_image_cache(self):
+        removed = core.clean_theme_assets(self.app.config.data)
+        self._refresh_cache_size()
+        Toast.show_text(tr("已清理 {n} 个图片缓存").replace("{n}", str(removed)))
 
     def _apply_target_change(self):
         self._rebuild_color_grid()
@@ -499,14 +552,20 @@ class SettingsWindow(FramelessDialog):
         path, _ = QFileDialog.getOpenFileName(
             self, "选择部件背景图", "", "图片 (*.png *.jpg *.jpeg *.bmp *.webp)")
         if path:
+            old = (self._diy_cfg().get("components") or {}).get(key, {}).get("image")
             saved = core.save_theme_image(path)
             if saved:
                 self._diy_update_comp(key, image=saved, color="")
+                core.remove_theme_image_if_unused(old, self.app.config.data)
+                self._refresh_cache_size()
 
     def _clear_diy_comp(self, key):
         comps = dict(self._diy_cfg().get("components") or {})
+        old = (comps.get(key) or {}).get("image")
         comps.pop(key, None)
         self._diy_save(components=comps)
+        core.remove_theme_image_if_unused(old, self.app.config.data)
+        self._refresh_cache_size()
         self._rebuild_diy_grid()
         self._apply_diy()
 
@@ -672,10 +731,7 @@ class SettingsWindow(FramelessDialog):
 
     # ================================================================ 紧凑模式美化
     def _page_compact(self, lay):
-        """把紧凑模式外观作为个性化页的第三个主题区域。"""
-        sep = QLabel(tr("⏱ 紧凑模式"))
-        sep.setStyleSheet(f"font-weight:bold;margin-top:14px;color:{self.t['accent']};")
-        lay.addWidget(sep)
+        """紧凑模式设置区（个性化页堆叠中的第三页）。"""
         self._compact_cfg = dict(self.app.config.get("compact_style", default={}))
         comps = self._compact_cfg.get("components") or []
 
@@ -779,8 +835,11 @@ class SettingsWindow(FramelessDialog):
             self._compact_set_image(path)
 
     def _compact_set_image(self, path):
+        old = self._compact_cfg.get("bg_image")
         self._compact_cfg["bg_image"] = core.save_theme_image(path) if path else ""
+        core.remove_theme_image_if_unused(old, self.app.config.data)
         self._compact_save()
+        self._refresh_cache_size()
 
     def _compact_save(self, *_):
         comps = [key for box, key in self._compact_boxes if box.isChecked()]
