@@ -592,8 +592,7 @@ class SettingsWindow(FramelessDialog):
         self._compact_boxes = []
         for key, label in (("clock", tr("时钟")),
                            ("offwork", tr("下班倒计时")),
-                           ("urgent", tr("截止倒计时（最近紧急事项）")),
-                           ("recent", tr("最近项目"))):
+                           ("urgent", tr("最近事项倒计时"))):
             box = QCheckBox(label)
             box.setChecked(key in comps)
             box.toggled.connect(self._compact_save)

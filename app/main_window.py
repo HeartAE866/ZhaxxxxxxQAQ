@@ -425,9 +425,9 @@ class FloatWindow(_EdgeResizableMixin, QWidget):
         self.compact_bar = BgFrame(objectName="FrostedPanel")
         cl = QHBoxLayout(self.compact_bar)
         cl.setContentsMargins(10, 4, 10, 4)
-        self.compact_lbl = QLabel()
+        self.compact_lbl = QLabel(alignment=Qt.AlignCenter)
         self.compact_lbl.setWordWrap(True)
-        cl.addWidget(self.compact_lbl)
+        cl.addWidget(self.compact_lbl, 1)
         self.compact_bar.hide()
         outer.addWidget(self.compact_bar)
         self.compact_bar.setMouseTracking(True)
@@ -477,11 +477,12 @@ class FloatWindow(_EdgeResizableMixin, QWidget):
                 f"{n.year}年{n.month}月{n.day}日 星期{WEEKDAYS[n.weekday()]}")
         self._update_offwork()
 
-    def _offwork_text(self) -> str:
-        """按设置计算下班倒计时文案（空=不显示）。"""
+    def _offwork_text(self, force: bool = False) -> str:
+        """按设置计算下班倒计时文案（空=不显示）。
+        force=True（紧凑模式组件）：不依赖「提醒」页的启用开关，独立生效。"""
         cfg = self.app.config.get("offwork", default={})
         n = datetime.now()
-        if not cfg.get("enabled"):
+        if not cfg.get("enabled") and not force:
             return ""
         if cfg.get("weekdays_only", True) and n.weekday() >= 5:
             return tr("休息日")
@@ -739,16 +740,6 @@ class FloatWindow(_EdgeResizableMixin, QWidget):
                 .replace("{m}", str(mins))
         return tr("{m}分钟").replace("{m}", str(max(mins, 1)))
 
-    def _most_recent(self):
-        """最新一条非提醒事项（紧凑模式「最近」组件）。"""
-        best = None
-        for it in self.app.store.items:
-            if it["type"] == "remind":
-                continue
-            if best is None or (it.get("created") or "") > (best.get("created") or ""):
-                best = it
-        return best
-
     def _compact_parts(self) -> list:
         """按 compact_style 配置生成紧凑模式文本行。"""
         cfg = self.app.config.get("compact_style", default={})
@@ -758,10 +749,12 @@ class FloatWindow(_EdgeResizableMixin, QWidget):
             if c == "clock":
                 parts.append(datetime.now().strftime("%H:%M:%S"))
             elif c == "offwork":
-                t = self._offwork_text()
+                # 下班倒计时独立生效（不依赖提醒页开关）
+                t = self._offwork_text(force=True)
                 if t:
                     parts.append(t)
-            elif c == "urgent":
+            elif c in ("urgent", "recent"):
+                # 最近事项倒计时（recent 为旧配置兼容，已合并至此）
                 item = self._most_urgent()
                 if item:
                     dl = core.parse_dt(item.get("deadline"))
@@ -769,10 +762,6 @@ class FloatWindow(_EdgeResizableMixin, QWidget):
                         parts.append(tr("「{t}」剩{r}")
                                      .replace("{t}", item["title"])
                                      .replace("{r}", self._fmt_remain(dl)))
-            elif c == "recent":
-                it = self._most_recent()
-                if it:
-                    parts.append(tr("最近：{t}").replace("{t}", it["title"]))
         return parts
 
     def _apply_compact_style(self):
