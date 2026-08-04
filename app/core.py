@@ -4,11 +4,14 @@
 from __future__ import annotations
 
 import calendar
+import base64
 import csv
+import hashlib
 import json
 import logging
 import os
 import re
+import shutil
 import sys
 import traceback
 import uuid
@@ -32,6 +35,7 @@ EXPORT_DIR = os.path.join(ROOT, "导出")
 DEFAULT_BASE_FOLDER = os.path.join(ROOT, "工作文件夹")
 CONFIG_PATH = os.path.join(ROOT, "config.json")
 DATA_PATH = os.path.join(DATA_DIR, "data.json")
+THEME_ASSET_DIR = os.path.join(DATA_DIR, "theme_assets")
 ICON_PATH = os.path.join(RES_DIR, "icon.jpg")
 LOGO_PATH = os.path.join(RES_DIR, "logo.png")
 VBS_PATH = os.path.join(ROOT, "ZhaxxxxxxQAQ.vbs")
@@ -51,10 +55,42 @@ DONATION_IMG = os.path.join(_USER_DESKTOP, "赞赏码.png")
 if not os.path.exists(DONATION_IMG):
     DONATION_IMG = os.path.join(RES_DIR, "donation.png")
 
-for _d in (DATA_DIR, LOG_DIR, EXPORT_DIR, DEFAULT_BASE_FOLDER, RES_DIR):
+for _d in (DATA_DIR, LOG_DIR, EXPORT_DIR, DEFAULT_BASE_FOLDER, RES_DIR,
+           THEME_ASSET_DIR):
     os.makedirs(_d, exist_ok=True)
 
 FMT = "%Y-%m-%d %H:%M"          # 精确到分钟
+
+
+def save_theme_image(path: str) -> str:
+    """将用户选择的背景图复制到应用数据目录，返回内嵌副本路径。"""
+    if not path or not os.path.isfile(path):
+        return ""
+    try:
+        ext = os.path.splitext(path)[1].lower() or ".png"
+        digest = hashlib.sha256(os.path.abspath(path).encode("utf-8")).hexdigest()[:16]
+        target = os.path.join(THEME_ASSET_DIR, digest + ext)
+        if os.path.abspath(path) != os.path.abspath(target):
+            shutil.copy2(path, target)
+        return target
+    except OSError:
+        log.error("保存主题图片失败:\n" + traceback.format_exc())
+        return ""
+
+
+def save_theme_image_data(data: str, name: str = "background.png") -> str:
+    """将主题导入的 base64 图片写入应用数据目录。"""
+    try:
+        raw = base64.b64decode(data)
+        ext = os.path.splitext(name)[1].lower() or ".png"
+        digest = hashlib.sha256(raw).hexdigest()[:16]
+        target = os.path.join(THEME_ASSET_DIR, digest + ext)
+        with open(target, "wb") as f:
+            f.write(raw)
+        return target
+    except (ValueError, OSError):
+        log.error("导入主题图片失败:\n" + traceback.format_exc())
+        return ""
 
 
 def now() -> datetime:
@@ -200,6 +236,8 @@ class Config:
             except Exception:
                 log.error("读取 config.json 失败:\n" + traceback.format_exc())
         self._migrate(raw_rules)
+        if self._migrate_theme_images():
+            self.save()
 
     def _migrate(self, raw_rules=None):
         """旧版本配置升级。"""
@@ -211,7 +249,32 @@ class Config:
         if isinstance(fr, dict) and isinstance(fr.get("rules"), list) \
                 and not any("（示例）" in (r.get("name") or "")
                             for r in fr["rules"]):
-            fr["rules"].extend([dict(r) for r in EXAMPLE_FOLDER_RULES])
+                fr["rules"].extend([dict(r) for r in EXAMPLE_FOLDER_RULES])
+
+    def _migrate_theme_images(self):
+        """把旧配置中的外部主题图片迁移到应用数据目录。"""
+        changed = False
+
+        def walk(value):
+            nonlocal changed
+            if isinstance(value, dict):
+                for key, item in list(value.items()):
+                    if key in ("image", "bg_image") and isinstance(item, str) \
+                            and item and os.path.isfile(item):
+                        saved = save_theme_image(item)
+                        if saved and os.path.abspath(saved) != os.path.abspath(item):
+                            value[key] = saved
+                            changed = True
+                    else:
+                        walk(item)
+            elif isinstance(value, list):
+                for item in value:
+                    walk(item)
+
+        for key in ("theme", "theme_settings", "diy_bg", "diy_bg_settings",
+                    "compact_style"):
+            walk(self.data.get(key))
+        return changed
 
     def _merge(self, base: dict, extra: dict):
         for k, v in extra.items():
@@ -608,17 +671,20 @@ def open_folder(path: str):
 
 # ---------------------------------------------------------------- 开机自启
 def autostart_command() -> str:
-    """开机自启命令：打包后直接指向 exe，开发模式用 wscript 静默启动。"""
+    """开机自启命令：打包后直接指向 exe，开发模式用 pythonw 运行 main.py。
+    注册表应用名用软件名，图标/名称在任务管理器中正确显示。"""
     if getattr(sys, "frozen", False):
         return f'"{sys.executable}"'
-    return f'wscript.exe "{VBS_PATH}"'
+    pyw = os.path.join(os.path.dirname(sys.executable), "pythonw.exe")
+    return f'"{pyw}" -X utf8 "{os.path.join(ROOT, "app", "main.py")}"'
 
 
 def autostart_enabled() -> bool:
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_REG_KEY) as k:
             val, _ = winreg.QueryValueEx(k, APP_NAME)
-            return APP_NAME in val or "wscript" in val.lower()
+            return APP_NAME in val or "pythonw" in val.lower() \
+                or "wscript" in val.lower()
     except OSError:
         return False
 

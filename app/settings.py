@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import base64
+import hashlib
 import os
 import shutil
 import traceback
@@ -12,7 +14,7 @@ from PySide6.QtCore import QTimer, Qt, Signal
 from PySide6.QtGui import QColor, QFontDatabase, QGuiApplication, QPixmap
 from PySide6.QtWidgets import (QButtonGroup, QCheckBox, QComboBox, QDialog,
                                QFileDialog, QFrame, QGridLayout, QHBoxLayout, QLabel,
-                               QInputDialog,
+                               QInputDialog, QDialogButtonBox,
                                QLineEdit, QListWidget, QListWidgetItem,
                                QPushButton, QScrollArea, QSizePolicy, QSlider,
                                QSpinBox,
@@ -95,7 +97,6 @@ class SettingsWindow(FramelessDialog):
         self.body.addLayout(row)
 
         self._page_personal()
-        self._page_compact()
         self._page_folder()
         self._page_remind()
         self._page_hotkey()
@@ -274,6 +275,9 @@ class SettingsWindow(FramelessDialog):
             b.clicked.connect(fn)
             trow.addWidget(b)
         lay.addLayout(trow)
+
+        # 紧凑模式与两套主题并列放在个性化页
+        self._page_compact(lay)
 
         # 顶部时钟显示
         crow = QHBoxLayout()
@@ -495,7 +499,9 @@ class SettingsWindow(FramelessDialog):
         path, _ = QFileDialog.getOpenFileName(
             self, "选择部件背景图", "", "图片 (*.png *.jpg *.jpeg *.bmp *.webp)")
         if path:
-            self._diy_update_comp(key, image=path, color="")
+            saved = core.save_theme_image(path)
+            if saved:
+                self._diy_update_comp(key, image=saved, color="")
 
     def _clear_diy_comp(self, key):
         comps = dict(self._diy_cfg().get("components") or {})
@@ -556,12 +562,30 @@ class SettingsWindow(FramelessDialog):
             try:
                 with open(path, "r", encoding="utf-8") as f:
                     th = json.load(f)
-                self._edit.clear()
-                self._edit.update({**theme_mod.DEFAULT_THEME, **th})
-                self._prune_theme_keys()
-                self.app.config.data[self._kind] = self._edit
+                if "parts" not in th:
+                    th = {"parts": {"theme": th}, "assets": {}}
+                available = [p for p in ("theme", "theme_settings", "compact_style")
+                             if p in th.get("parts", {})]
+                chosen = self._choose_theme_parts(tr("选择要导入的主题"), available)
+                if not chosen:
+                    return
+                assets = th.get("assets") or {}
+                for part in chosen:
+                    value = self._unpack_theme_value(th["parts"][part], assets)
+                    if part in ("theme", "theme_settings"):
+                        value = {**theme_mod.DEFAULT_THEME, **(value or {})}
+                        if part == "theme_settings":
+                            for _k in ("done_text", "high", "mid", "low"):
+                                value.pop(_k, None)
+                    self.app.config.data[part] = value
                 self.app.config.save()
-                self.app.apply_theme(self._kind)
+                for part in chosen:
+                    if part in ("theme", "theme_settings"):
+                        self.app.apply_theme(part)
+                if "compact_style" in chosen:
+                    self.app.win._apply_compact_style()
+                    self.app.win._update_compact_text()
+                self._edit = self.app.config.data.get(self._kind, self._edit)
                 self._sync_controls()
                 Toast.show_text(tr("主题已导入"))
             except Exception as e:
@@ -569,22 +593,89 @@ class SettingsWindow(FramelessDialog):
                 Toast.show_text(tr("主题文件无效"))
 
     def _export_theme(self):
-        path = os.path.join(core.EXPORT_DIR,
-                            f"theme_{self._edit.get('name', 'custom')}.json")
+        chosen = self._choose_theme_parts(tr("选择要导出的主题"),
+                                          ["theme", "theme_settings", "compact_style"])
+        if not chosen:
+            return
+        assets = {}
+        parts = {}
+        for part in chosen:
+            parts[part] = self._pack_theme_value(
+                self.app.config.get(part, default={}), assets)
+        path, _ = QFileDialog.getSaveFileName(
+            self, tr("导出主题"),
+            os.path.join(core.EXPORT_DIR, "theme_bundle.json"),
+            tr("主题文件 (*.json)"))
+        if not path:
+            return
         with open(path, "w", encoding="utf-8") as f:
-            json.dump(self._edit, f, ensure_ascii=False, indent=2)
+            json.dump({"format": 2, "parts": parts, "assets": assets},
+                      f, ensure_ascii=False, indent=2)
         core.log.info(f"导出主题: {path}")
         Toast.show_text(tr("已导出到 导出 目录"))
 
-    # ================================================================ 紧凑模式美化
-    def _page_compact(self):
-        w = QWidget()
-        lay = QVBoxLayout(w)
-        lay.setAlignment(Qt.AlignTop)
-        self.nav.addItem(tr("⏱ 紧凑模式"))
-        scroll = self._wrap_scroll(w)
-        self.pages.addWidget(scroll)
+    def _choose_theme_parts(self, title, available):
+        """多选主题组成：桌面、设置栏、紧凑模式。"""
+        d = QDialog(self)
+        d.setWindowTitle(title)
+        lay = QVBoxLayout(d)
+        boxes = []
+        labels = {
+            "theme": tr("桌面应用主题"),
+            "theme_settings": tr("设置栏主题"),
+            "compact_style": tr("紧凑模式主题"),
+        }
+        for part in available:
+            box = QCheckBox(labels.get(part, part))
+            box.setChecked(True)
+            lay.addWidget(box)
+            boxes.append((part, box))
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(d.accept)
+        buttons.rejected.connect(d.reject)
+        lay.addWidget(buttons)
+        if d.exec() != QDialog.Accepted:
+            return []
+        return [part for part, box in boxes if box.isChecked()]
 
+    def _pack_theme_value(self, value, assets):
+        """递归把主题中的图片路径转为 JSON 内嵌资产引用。"""
+        if isinstance(value, dict):
+            return {k: self._pack_theme_value(v, assets) for k, v in value.items()}
+        if isinstance(value, list):
+            return [self._pack_theme_value(v, assets) for v in value]
+        if isinstance(value, str) and os.path.isfile(value):
+            ext = os.path.splitext(value)[1].lower() or ".png"
+            try:
+                raw = open(value, "rb").read()
+                asset_id = hashlib.sha256(raw).hexdigest()[:16]
+                assets.setdefault(asset_id, {
+                    "name": "background" + ext,
+                    "data": base64.b64encode(raw).decode("ascii"),
+                })
+                return "@asset:" + asset_id
+            except OSError:
+                return value
+        return value
+
+    def _unpack_theme_value(self, value, assets):
+        """递归还原主题内嵌图片到应用数据目录。"""
+        if isinstance(value, dict):
+            return {k: self._unpack_theme_value(v, assets) for k, v in value.items()}
+        if isinstance(value, list):
+            return [self._unpack_theme_value(v, assets) for v in value]
+        if isinstance(value, str) and value.startswith("@asset:"):
+            asset = assets.get(value[7:]) or {}
+            return core.save_theme_image_data(asset.get("data", ""),
+                                              asset.get("name", "background.png"))
+        return value
+
+    # ================================================================ 紧凑模式美化
+    def _page_compact(self, lay):
+        """把紧凑模式外观作为个性化页的第三个主题区域。"""
+        sep = QLabel(tr("⏱ 紧凑模式"))
+        sep.setStyleSheet(f"font-weight:bold;margin-top:14px;color:{self.t['accent']};")
+        lay.addWidget(sep)
         self._compact_cfg = dict(self.app.config.get("compact_style", default={}))
         comps = self._compact_cfg.get("components") or []
 
@@ -688,7 +779,7 @@ class SettingsWindow(FramelessDialog):
             self._compact_set_image(path)
 
     def _compact_set_image(self, path):
-        self._compact_cfg["bg_image"] = path
+        self._compact_cfg["bg_image"] = core.save_theme_image(path) if path else ""
         self._compact_save()
 
     def _compact_save(self, *_):
