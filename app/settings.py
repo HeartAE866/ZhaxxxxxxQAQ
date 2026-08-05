@@ -290,8 +290,11 @@ class SettingsWindow(FramelessDialog):
         rrow.addWidget(self.radius_lbl)
         tlay.addLayout(rrow)
 
-        # 主题预设与导入导出
-        tlay.addWidget(QLabel(tr("主题")))
+        # 主题预设与导入导出（三合一主题：桌面+设置栏+紧凑；仅设置栏主题页显示）
+        self._theme_bar = QWidget()
+        tbar = QVBoxLayout(self._theme_bar)
+        tbar.setContentsMargins(0, 0, 0, 0)
+        tbar.addWidget(QLabel(tr("主题（保存桌面+设置栏+紧凑全部设置）")))
         trow = QHBoxLayout()
         self.theme_combo = QComboBox()
         self._refresh_theme_combo()
@@ -303,7 +306,9 @@ class SettingsWindow(FramelessDialog):
             b = QPushButton(tr(text))
             b.clicked.connect(fn)
             trow.addWidget(b)
-        tlay.addLayout(trow)
+        tbar.addLayout(trow)
+        self._theme_bar.setVisible(False)
+        tlay.addWidget(self._theme_bar)
 
         # 紧凑模式显示内容（仅紧凑模式主题可见）
         self._compact_content = self._compact_content_widget()
@@ -368,6 +373,9 @@ class SettingsWindow(FramelessDialog):
     def _apply_target_change(self):
         if hasattr(self, "_compact_content"):
             self._compact_content.setVisible(self._kind == "compact_style")
+        if hasattr(self, "_theme_bar"):
+            # 主题选择系统仅保留在设置栏主题页（三合一主题入口）
+            self._theme_bar.setVisible(self._kind == "theme_settings")
         self._rebuild_color_grid()
         self._sync_controls()
         self._sync_diy_ui()
@@ -610,24 +618,26 @@ class SettingsWindow(FramelessDialog):
         self.theme_combo.addItems(self.app.config.get("saved_themes", default={}).keys())
 
     def _load_theme(self):
+        """加载三合一主题：桌面 + 设置栏 + 紧凑模式全部同步应用。"""
         name = self.theme_combo.currentText()
         saved = self.app.config.get("saved_themes", default={})
-        if name in saved:
-            self._edit.clear()
-            self._edit.update(copy.deepcopy(saved[name]))
-            self._prune_theme_keys()
-            self.app.config.data[self._kind] = self._edit
-            self.app.config.save()
-            self.app.apply_theme(self._kind)
-            if self._kind == "compact_style":
-                win = getattr(self.app, "win", None)
-                if win is not None:
-                    win._apply_compact_style()
-                    win._update_compact_text()
-            self._sync_controls()
-            self._sync_diy_ui()
-            self._apply_diy()
-            self._refresh_cache_size()
+        entry = saved.get(name)
+        if not entry:
+            return
+        if "theme" not in entry:
+            entry = {"theme": entry}   # 兼容旧格式
+        self.app.config.data["theme"] = copy.deepcopy(entry.get("theme") or {})
+        self.app.config.data["theme_settings"] = copy.deepcopy(
+            entry.get("theme_settings") or dict(theme_mod.DEFAULT_THEME_SETTINGS))
+        self.app.config.data["compact_style"] = copy.deepcopy(
+            entry.get("compact_style") or dict(self.app.config.get("compact_style", default={})))
+        self.app.config.save()
+        self.app.apply_theme("all")
+        self._edit = self.app.config.data.get(self._kind, self._edit)
+        self._sync_controls()
+        self._sync_diy_ui()
+        self._apply_diy()
+        self._refresh_cache_size()
 
     def _prune_theme_keys(self):
         if self._kind == "theme_settings":
@@ -638,6 +648,14 @@ class SettingsWindow(FramelessDialog):
             for _k in ("done_text", "high", "mid", "low"):
                 self._edit.pop(_k, None)
 
+    def _snapshot_theme(self, name):
+        """把当前三份主题配置打包为三合一主题条目。"""
+        return {
+            "theme": copy.deepcopy(self.app.config.get("theme", default={})),
+            "theme_settings": copy.deepcopy(self.app.config.get("theme_settings", default={})),
+            "compact_style": copy.deepcopy(self.app.config.get("compact_style", default={})),
+        }
+
     def _save_current_theme(self):
         """保存当前改动到主题栏选中的主题（无选中则等同另存为）。"""
         name = self.theme_combo.currentText()
@@ -645,8 +663,9 @@ class SettingsWindow(FramelessDialog):
             self._save_theme()
             return
         themes = self.app.config.get("saved_themes", default={})
-        self._edit["name"] = name
-        themes[name] = copy.deepcopy(self._edit)
+        entry = self._snapshot_theme(name)
+        entry["theme"]["name"] = name
+        themes[name] = entry
         self.app.config.set("saved_themes", themes)
         self._refresh_theme_combo()
         self.theme_combo.setCurrentText(name)
@@ -655,12 +674,14 @@ class SettingsWindow(FramelessDialog):
     def _save_theme(self):
         name, ok = InputDialog.get_text(self, self.t, tr("保存主题"),
                                         tr("主题名称："),
-                                        text=self._edit.get("name", tr("自定义主题")))
+                                        text=self.app.config.get("theme", default={})
+                                        .get("name", tr("自定义主题")))
         if ok and name.strip():
             name = name.strip()
-            self._edit["name"] = name
             themes = self.app.config.get("saved_themes", default={})
-            themes[name] = copy.deepcopy(self._edit)
+            entry = self._snapshot_theme(name)
+            entry["theme"]["name"] = name
+            themes[name] = entry
             self.app.config.set("saved_themes", themes)
             self._refresh_theme_combo()
             self.theme_combo.setCurrentText(name)
@@ -680,7 +701,25 @@ class SettingsWindow(FramelessDialog):
             del themes[name]
             self.app.config.set("saved_themes", themes)
             self._refresh_theme_combo()
-            Toast.show_text(tr("已删除"))
+            # 删除后恢复默认主题（桌面+设置栏+紧凑三合一），并清理孤儿图片缓存
+            self._reset_to_default_theme()
+            Toast.show_text(tr("已删除，已恢复默认主题"))
+
+    def _reset_to_default_theme(self):
+        """恢复默认主题（三合一）并应用。"""
+        self.app.config.data["theme"] = copy.deepcopy(theme_mod.DEFAULT_THEME)
+        self.app.config.data["theme_settings"] = copy.deepcopy(
+            theme_mod.DEFAULT_THEME_SETTINGS)
+        self.app.config.data["compact_style"] = copy.deepcopy(
+            core.DEFAULT_CONFIG["compact_style"])
+        self.app.config.save()
+        core.clean_theme_assets(self.app.config.data)
+        self._refresh_cache_size()
+        self.app.apply_theme("all")
+        self._edit = self.app.config.data.get(self._kind, self._edit)
+        self._sync_controls()
+        self._sync_diy_ui()
+        self._apply_diy()
 
     def _import_theme(self):
         path, _ = QFileDialog.getOpenFileName(self, tr("导入主题"), core.EXPORT_DIR,
@@ -691,71 +730,55 @@ class SettingsWindow(FramelessDialog):
                     th = json.load(f)
                 if "parts" not in th:
                     th = {"parts": {"theme": th}, "assets": {}}
-                available = [p for p in ("theme", "theme_settings", "compact_style")
-                             if p in th.get("parts", {})]
-                chosen = self._choose_theme_parts(tr("选择要导入的主题"), available)
-                if not chosen:
-                    return
                 assets = th.get("assets") or {}
-                imported_names = []
-                for part in chosen:
+                entry = {}
+                for part in ("theme", "theme_settings", "compact_style"):
+                    if part not in th.get("parts", {}):
+                        continue
                     value = self._unpack_theme_value(th["parts"][part], assets)
-                    if part in ("theme", "theme_settings"):
+                    if part == "theme":
                         value = {**theme_mod.DEFAULT_THEME, **(value or {})}
-                        if part == "theme_settings":
-                            for _k in ("done_text", "high", "mid", "low"):
-                                value.pop(_k, None)
+                    elif part == "theme_settings":
+                        value = {**theme_mod.DEFAULT_THEME_SETTINGS, **(value or {})}
+                        for _k in ("done_text", "high", "mid", "low"):
+                            value.pop(_k, None)
                     elif part == "compact_style":
-                        base_cfg = dict(self.app.config.get("compact_style", default={}))
+                        base_cfg = dict(core.DEFAULT_CONFIG["compact_style"])
                         base_cfg.update(value or {})
                         value = base_cfg
-                    self.app.config.data[part] = value
-                    # 导入即保存进主题栏：桌面主题存原名，设置栏/紧凑同名时加后缀
-                    if part in ("theme", "theme_settings", "compact_style"):
-                        themes = self.app.config.get("saved_themes", default={})
-                        nm = (value or {}).get("name") or tr("导入主题")
-                        if part == "theme_settings":
-                            nm = nm + tr("（设置栏）")
-                        elif part == "compact_style":
-                            nm = nm + tr("（紧凑）")
-                        while nm in themes:
-                            nm += "·"
-                        themes[nm] = copy.deepcopy(value)
-                        self.app.config.set("saved_themes", themes)
-                        imported_names.append(nm)
-                self.app.config.save()
-                for part in chosen:
-                    if part in ("theme", "theme_settings"):
-                        self.app.apply_theme(part)
-                    elif part == "compact_style":
-                        self.app.win._apply_compact_style()
-                        self.app.win._update_compact_text()
-                self._edit = self.app.config.data.get(self._kind, self._edit)
-                self._sync_controls()
-                self._sync_diy_ui()
-                self._apply_diy()
+                    entry[part] = value
+                if not entry:
+                    return
+                # 导入即保存进主题栏（三合一）并应用
+                nm = (entry.get("theme") or {}).get("name") or tr("导入主题")
+                themes = self.app.config.get("saved_themes", default={})
+                while nm in themes:
+                    nm += "·"
+                themes[nm] = entry
+                self.app.config.set("saved_themes", themes)
                 self._refresh_theme_combo()
-                if imported_names:
-                    # 优先选中桌面主题（无后缀名），否则选最后导入的
-                    pick = next((n for n in imported_names if tr("（设置栏）") not in n),
-                                imported_names[-1])
-                    self.theme_combo.setCurrentText(pick)
-                    self._load_theme()
+                self.theme_combo.setCurrentText(nm)
+                self._load_theme()
                 Toast.show_text(tr("主题已导入"))
             except Exception as e:
                 core.log.error(f"导入主题失败: {e}")
                 Toast.show_text(tr("主题文件无效"))
 
     def _export_theme(self):
-        chosen = self._choose_theme_parts(tr("选择要导出的主题"),
-                                          ["theme", "theme_settings", "compact_style"])
-        if not chosen:
-            return
+        # 导出当前选中的主题（三合一）
+        name = self.theme_combo.currentText()
+        themes = self.app.config.get("saved_themes", default={})
+        entry = themes.get(name)
+        if entry and "theme" not in entry:
+            entry = {"theme": entry}
         assets = {}
         parts = {}
-        for part in chosen:
-            parts[part] = self._pack_theme_value(
-                self.app.config.get(part, default={}), assets)
+        for part in ("theme", "theme_settings", "compact_style"):
+            if entry and entry.get(part):
+                parts[part] = self._pack_theme_value(entry[part], assets)
+            else:
+                parts[part] = self._pack_theme_value(
+                    self.app.config.get(part, default={}), assets)
         path, _ = QFileDialog.getSaveFileName(
             self, tr("导出主题"),
             os.path.join(core.EXPORT_DIR, "theme_bundle.json"),
@@ -763,38 +786,10 @@ class SettingsWindow(FramelessDialog):
         if not path:
             return
         with open(path, "w", encoding="utf-8") as f:
-            json.dump({"format": 2, "parts": parts, "assets": assets},
+            json.dump({"format": 3, "parts": parts, "assets": assets},
                       f, ensure_ascii=False, indent=2)
         core.log.info(f"导出主题: {path}")
         Toast.show_text(tr("已导出到 导出 目录"))
-
-    def _choose_theme_parts(self, title, available):
-        """多选主题组成：桌面、设置栏、紧凑模式（主题化对话框）。"""
-        d = FramelessDialog(self, self.t, title, width=380)
-        boxes = []
-        labels = {
-            "theme": tr("桌面应用主题"),
-            "theme_settings": tr("设置栏主题"),
-            "compact_style": tr("紧凑模式主题"),
-        }
-        for part in available:
-            box = QCheckBox(labels.get(part, part))
-            box.setChecked(True)
-            d.body.addWidget(box)
-            boxes.append((part, box))
-        row = QHBoxLayout()
-        row.addStretch()
-        btn_no = QPushButton(tr("取消"))
-        btn_no.clicked.connect(d.reject)
-        btn_ok = QPushButton(tr("确定"), objectName="AccentButton")
-        btn_ok.clicked.connect(d.accept)
-        row.addWidget(btn_no)
-        row.addWidget(btn_ok)
-        d.body.addLayout(row)
-        btn_ok.setDefault(True)
-        if d.exec() != QDialog.Accepted:
-            return []
-        return [part for part, box in boxes if box.isChecked()]
 
     def _pack_theme_value(self, value, assets):
         """递归把主题中的图片路径转为 JSON 内嵌资产引用。"""

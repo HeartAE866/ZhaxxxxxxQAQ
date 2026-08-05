@@ -244,7 +244,13 @@ DEFAULT_CONFIG = {
               "diy_bg": {"enabled": False, "components": {}}},
     "theme_settings": {**dict(DEFAULT_THEME_SETTINGS),
                        "diy_bg": {"enabled": False, "components": {}}},
-    "saved_themes": dict(DEFAULT_THEMES),
+    "saved_themes": {
+        nm: {"theme": dict(t),
+             "theme_settings": {k: v for k, v in t.items()
+                                if k in DEFAULT_THEME_SETTINGS},
+             "compact_style": {}}
+        for nm, t in DEFAULT_THEMES.items()
+    },
     "window": {"x": None, "y": None, "w": 330, "h": None,
                "locked": False, "topmost": False, "compact": False,
                "click_through": False, "show_clock": True},
@@ -340,6 +346,12 @@ class Config:
         th_comp = ((th.get("diy_bg") or {}).get("components") or {}).get("compact") or {}
         if th_comp and not (cs.get("diy_bg") or {}).get("components", {}).get("compact"):
             cs.setdefault("diy_bg", {}).setdefault("components", {})["compact"] = dict(th_comp)
+        # 主题栏条目统一为三合一结构（v1.3.0beta3 及以前：单主题字典）
+        saved = self.data.get("saved_themes")
+        if isinstance(saved, dict):
+            for nm, entry in saved.items():
+                if isinstance(entry, dict) and "theme" not in entry:
+                    saved[nm] = {"theme": entry}
 
     def _migrate_theme_images(self):
         """把旧配置中的外部主题图片迁移到应用数据目录。"""
