@@ -15,8 +15,8 @@ from i18n import tr
 from PySide6.QtCore import QEvent, QObject, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import (QColor, QCursor, QGuiApplication, QImage,
                            QKeySequence, QPainter, QPainterPath, QPen, QPixmap)
-from PySide6.QtWidgets import (QCheckBox, QDialog, QFrame, QGridLayout,
-                               QHBoxLayout, QLabel, QLineEdit, QMenu,
+from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QFrame,
+                               QGridLayout, QHBoxLayout, QLabel, QLineEdit, QMenu,
                                QPushButton, QSlider, QVBoxLayout, QWidget)
 
 
@@ -575,6 +575,61 @@ class ConfirmDialog(FramelessDialog):
         d = cls(parent, t, title, message, checkbox, ok_text, True, warn_checkbox)
         ok = d.exec() == QDialog.Accepted
         return ok, (d.checkbox.isChecked() if d.checkbox else False)
+
+
+class InputDialog(FramelessDialog):
+    """主题化输入对话框：单行文本输入或下拉选择（替代原生 QInputDialog，避免白底白字）。"""
+
+    def __init__(self, parent, t: dict, title: str, label: str,
+                 text: str = "", items: list[str] | None = None,
+                 current: int = 0):
+        super().__init__(parent, t, title, width=420)
+        ql = QLabel(label)
+        self.body.addWidget(ql)
+        self._item_ok = False
+        self._combo = None
+        self._line = None
+        if items:
+            self.combo = QComboBox()
+            self.combo.addItems(items)
+            self.combo.setCurrentIndex(max(0, min(current, len(items) - 1)))
+            self.body.addWidget(self.combo)
+            self._combo = self.combo
+        else:
+            self.line = QLineEdit(text)
+            self.line.setClearButtonEnabled(True)
+            self.line.selectAll()
+            self.body.addWidget(self.line)
+            self._line = self.line
+        row = QHBoxLayout()
+        row.addStretch()
+        btn_no = QPushButton(tr("取消"))
+        btn_no.clicked.connect(self.reject)
+        self.btn_ok = QPushButton(tr("确定"), objectName="AccentButton")
+        self.btn_ok.clicked.connect(self.accept)
+        row.addWidget(btn_no)
+        row.addWidget(self.btn_ok)
+        self.body.addLayout(row)
+        self.btn_ok.setDefault(True)
+
+    def _finish(self):
+        if self._combo is not None:
+            return self._combo.currentText()
+        return self._line.text().strip()
+
+    @classmethod
+    def get_text(cls, parent, t, title, label, text=""):
+        d = cls(parent, t, title, label, text=text)
+        if d.exec() != QDialog.Accepted:
+            return "", False
+        return d._finish(), True
+
+    @classmethod
+    def get_item(cls, parent, t, title, label, items, current=0):
+        d = cls(parent, t, title, label, items=items, current=current)
+        if d.exec() != QDialog.Accepted:
+            return "", False
+        return d._finish(), True
 
 
 class CountdownDialog(FramelessDialog):

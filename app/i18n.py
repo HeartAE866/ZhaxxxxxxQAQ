@@ -180,8 +180,7 @@ _TRANSLATIONS = {
     "窗口圆角": "Window Corner Radius",
     "显示时钟（底部日期时间）": "Show Clock (date & time at bottom)",
     "DIY 背景模式": "DIY Background Mode",
-    "开启 DIY 背景模式（自定义每个部件的背景，原主题颜色自动失效）":
-        "Enable DIY background mode (custom background per component; theme colors ignored)",
+    "开启 DIY 背景模式": "Enable DIY Background Mode",
     "各部件背景（纯色或图片，留空=透明显示下层背景）":
         "Component backgrounds (solid color or image; empty = transparent)",
     "主面板": "Main Panel",

@@ -15,7 +15,7 @@ from PySide6.QtCore import QTimer, Qt, Signal
 from PySide6.QtGui import QColor, QFontDatabase, QGuiApplication, QPixmap
 from PySide6.QtWidgets import (QButtonGroup, QCheckBox, QComboBox, QDialog,
                                QFileDialog, QFrame, QGridLayout, QHBoxLayout, QLabel,
-                               QInputDialog, QDialogButtonBox,
+                               QDialogButtonBox,
                                QLineEdit, QListWidget, QListWidgetItem,
                                QPushButton, QScrollArea, QSizePolicy, QSlider,
                                QSpinBox,
@@ -28,7 +28,8 @@ import theme as theme_mod
 import updater
 from i18n import tr
 from widgets import (FramelessDialog, ColorDialog, ConfirmDialog, HotkeyEdit,
-                     Toast, combo_text, rounded_pixmap, BgFrame, CountdownDialog)
+                     Toast, combo_text, rounded_pixmap, BgFrame, CountdownDialog,
+                     InputDialog)
 
 MAIN_COLOR_ITEMS = [
     ("bg", "主背景色", True), ("text", "文字颜色", False),
@@ -250,8 +251,7 @@ class SettingsWindow(FramelessDialog):
         diysep.setStyleSheet(f"font-weight:bold;margin-top:10px;color:{self.t['accent']};")
         tlay.addWidget(diysep)
         drow = QHBoxLayout()
-        self.diy_chk = QCheckBox(
-            tr("开启 DIY 背景模式（自定义每个部件的背景，原主题颜色自动失效）"))
+        self.diy_chk = QCheckBox(tr("开启 DIY 背景模式"))
         self.diy_chk.toggled.connect(self._diy_toggled)
         drow.addWidget(self.diy_chk)
         btn_clean = QPushButton(tr("清理图片缓存"))
@@ -297,8 +297,9 @@ class SettingsWindow(FramelessDialog):
         trow = QHBoxLayout()
         self.theme_combo = QComboBox()
         self._refresh_theme_combo()
+        self.theme_combo.activated.connect(self._load_theme)
         trow.addWidget(self.theme_combo, 1)
-        for text, fn in [("保存", self._save_current_theme), ("加载", self._load_theme),
+        for text, fn in [("保存", self._save_current_theme),
                          ("另存为", self._save_theme), ("删除", self._delete_theme),
                          ("导入", self._import_theme), ("导出", self._export_theme)]:
             b = QPushButton(tr(text))
@@ -616,7 +617,8 @@ class SettingsWindow(FramelessDialog):
         core.log.info(f"保存主题: {name}")
 
     def _save_theme(self):
-        name, ok = QInputDialog.getText(self, tr("保存主题"), tr("主题名称："),
+        name, ok = InputDialog.get_text(self, self.t, tr("保存主题"),
+                                        tr("主题名称："),
                                         text=self._edit.get("name", tr("自定义主题")))
         if ok and name.strip():
             name = name.strip()
@@ -1067,7 +1069,8 @@ class SettingsWindow(FramelessDialog):
 
     def _rename_rule(self):
         old = self.rule_combo.currentText()
-        name, ok = QInputDialog.getText(self, tr("重命名规则"), tr("规则名称："), text=old)
+        name, ok = InputDialog.get_text(self, self.t, tr("重命名规则"),
+                                        tr("规则名称："), text=old)
         if not ok or not name.strip() or name.strip() == old:
             return
         name = name.strip()
@@ -1192,7 +1195,8 @@ class SettingsWindow(FramelessDialog):
         return it.text() if it else None
 
     def _add_custom_folder(self):
-        name, ok = QInputDialog.getText(self, tr("新建子文件夹"), tr("子文件夹名称："))
+        name, ok = InputDialog.get_text(self, self.t, tr("新建子文件夹"),
+                                        tr("子文件夹名称："))
         if not ok or not name.strip():
             return
         name = name.strip()
@@ -1211,7 +1215,8 @@ class SettingsWindow(FramelessDialog):
         if not old:
             Toast.show_text(tr("请先选择一个子文件夹"))
             return
-        name, ok = QInputDialog.getText(self, tr("重命名"), tr("新的名称："), text=old)
+        name, ok = InputDialog.get_text(self, self.t, tr("重命名"),
+                                        tr("新的名称："), text=old)
         if not ok or not name.strip() or name.strip() == old:
             return
         name = name.strip()
@@ -1615,8 +1620,9 @@ class SettingsWindow(FramelessDialog):
         if not items:
             Toast.show_text(tr("没有可导出的事项"))
             return
-        fmt, ok = QInputDialog.getItem(self, tr("导出格式"), tr("选择格式："),
-                                       ["JSON", "CSV"], 0, False)
+        fmt, ok = InputDialog.get_item(self, self.t, tr("导出格式"),
+                                       tr("选择格式："),
+                                       ["JSON", "CSV"], 0)
         if not ok:
             return
         path = core.export_items(items, fmt.lower())
