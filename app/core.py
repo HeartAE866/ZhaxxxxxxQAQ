@@ -265,11 +265,18 @@ DEFAULT_CONFIG = {
     "offwork": {"enabled": False, "time": "18:00", "format": "min",
                 "weekdays_only": True, "template": "距下班 {n}"},
     "compact_style": {
+        "name": "紧凑模式主题",
+        "bg": "",                 # 背景色（空=跟随桌面主题）
+        "bg_alpha": 208,
+        "text": "",               # 文字色（空=跟随桌面主题）
+        "hover": "",
+        "accent": "",
+        "radius": 12,
+        "font_family": "",        # 空=跟随桌面主题
+        "font_size": 0,           # 0=跟随桌面主题
         "components": ["clock", "offwork", "urgent"],
-        "text_color": "",
-        "font_family": "",
-        "font_size": 0,
-        "diy": {"enabled": False},
+        "diy_bg": {"enabled": False,
+                   "components": {"compact": {"color": "", "image": "", "alpha": 100}}},
     },
     "hotkeys": {
         "settings": ["ctrl", "shift", "z", "x"],
@@ -312,16 +319,27 @@ class Config:
         for top, dst in (("diy_bg", "theme"), ("diy_bg_settings", "theme_settings")):
             if top in self.data and self.data[top]:
                 self.data.setdefault(dst, {})["diy_bg"] = self.data.pop(top)
-        # 紧凑 DIY 背景并入桌面主题（v1.3.0beta3 及以前：compact_style.diy.components.compact）
+        # 紧凑模式主题统一为主题字典结构（v1.3.0beta3 及以前：text_color/diy 独立键）
         cs = self.data.get("compact_style") or {}
-        cd = cs.get("diy") or {}
-        comp = (cd.get("components") or {}).get("compact") or {}
-        if comp.get("image") or comp.get("color"):
-            th = self.data.setdefault("theme", {})
-            db = th.setdefault("diy_bg", {})
-            db.setdefault("components", {})["compact"] = {
-                k: comp.get(k, "") for k in ("image", "color", "alpha")
-            }
+        if "text_color" in cs and not cs.get("text"):
+            cs["text"] = cs.pop("text_color")
+        if "diy" in cs:
+            old_diy = cs.pop("diy")
+            if old_diy:
+                db = cs.setdefault("diy_bg", {})
+                db["enabled"] = bool(old_diy.get("enabled"))
+                if old_diy.get("components"):
+                    db.setdefault("components", {})["compact"] = \
+                        (old_diy.get("components") or {}).get("compact") or {}
+        for k in ("bg", "hover", "accent", "radius"):
+            if k not in cs:
+                cs[k] = DEFAULT_CONFIG["compact_style"].get(k, "")
+        # 兼容 v1.3.0beta3 中间版：紧凑背景曾存于 theme.diy_bg.components.compact，
+        # 若紧凑主题自身没有背景则迁移回来（紧凑背景归属紧凑主题）
+        th = self.data.get("theme") or {}
+        th_comp = ((th.get("diy_bg") or {}).get("components") or {}).get("compact") or {}
+        if th_comp and not (cs.get("diy_bg") or {}).get("components", {}).get("compact"):
+            cs.setdefault("diy_bg", {}).setdefault("components", {})["compact"] = dict(th_comp)
 
     def _migrate_theme_images(self):
         """把旧配置中的外部主题图片迁移到应用数据目录。"""

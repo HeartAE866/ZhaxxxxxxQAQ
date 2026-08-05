@@ -196,6 +196,10 @@ _TRANSLATIONS = {
     "部件背景不透明度：{n}": "Background opacity: {n}",
     "桌面应用主题界面颜色（点击色块或输入十六进制，支持屏幕吸管）":
         "Desktop theme colors (click swatch or type hex; screen picker supported)",
+    "设置栏主题界面颜色": "Settings theme colors",
+    "紧凑模式主题颜色（留空=跟随桌面主题）": "Compact theme colors (empty = follow desktop theme)",
+    "紧凑条背景色": "Compact Bar Background",
+    "（紧凑）": " (Compact)",
     "主背景色": "Background",
     "文字颜色": "Text",
     "已完成文字色": "Done Text",

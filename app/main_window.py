@@ -774,29 +774,28 @@ class FloatWindow(_EdgeResizableMixin, QWidget):
         return parts
 
     def _apply_compact_style(self):
-        """应用紧凑模式样式：文字颜色/字号/字体（0=跟随主题）、背景图片/透明度。
-        紧凑背景绑定主题（theme.diy_bg.components.compact），随主题切换。"""
-        cfg = self.app.config.get("compact_style", default={})
+        """应用紧凑模式样式：与桌面/设置栏主题同构（紧凑主题字典，空值=跟随桌面主题）。"""
+        cfg = self.app.config.get("compact_style", default={}) or {}
+        th = self.t or {}
         ss = []
-        if cfg.get("text_color"):
-            ss.append(f"color:{cfg['text_color']};")
-        fs = cfg.get("font_size") or self.t.get("font_size", 10)
+        if cfg.get("text"):
+            ss.append(f"color:{cfg['text']};")
+        fs = int(cfg.get("font_size") or th.get("font_size", 10))
         ss.append(f"font-size:{fs}pt;")
-        fam = cfg.get("font_family")
-        if not fam:
-            fam = self.t.get("font_family", "")
+        fam = cfg.get("font_family") or th.get("font_family", "")
         if fam:
             ss.append(f"font-family:'{fam}';")
         self.compact_lbl.setStyleSheet("".join(ss))
-        # 紧凑条背景：开启紧凑 DIY 时使用主题内嵌的紧凑背景（随主题切换）
-        diy = cfg.get("diy") or {}
-        if diy.get("enabled"):
-            th = self.app.config.get("theme") or {}
-            comp = ((th.get("diy_bg") or {}).get("components") or {}).get("compact") or {}
-            self.compact_bar.set_bg("", comp.get("image") or "",
-                                    int(comp.get("alpha", 100)))
+        # 紧凑条背景：DIY 背景（主题内嵌 compact 组件）> 紧凑主题 bg > 桌面主题 QSS
+        db = cfg.get("diy_bg") or {}
+        if db.get("enabled"):
+            c = (db.get("components") or {}).get("compact") or {}
+            self.compact_bar.set_bg(c.get("color") or "", c.get("image") or "",
+                                    int(c.get("alpha", 100)))
+        elif cfg.get("bg"):
+            self.compact_bar.set_bg(cfg["bg"], "",
+                                    round(int(cfg.get("bg_alpha", 208)) / 255 * 100))
         else:
-            # 未开启紧凑 DIY：跟随主题背景（QSS FrostedPanel）
             self.compact_bar.set_bg("", "", 100)
 
     def _update_compact_text(self):

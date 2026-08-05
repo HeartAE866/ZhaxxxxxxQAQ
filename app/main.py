@@ -422,6 +422,11 @@ class App(QObject):
                 self.settings_win.t = ts
                 self.settings_win.setStyleSheet(theme_mod.build_qss(ts))
                 apply_frosted(self.settings_win, ts)
+        if kind in ("compact_style", "all"):
+            if self.win is not None:
+                self.win._apply_compact_style()
+                if self.config.get("window", "compact"):
+                    self.win._update_compact_text()
 
     # ---------------------------------------------------------------- 快捷键
     def _build_hotkeys(self):

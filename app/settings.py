@@ -43,6 +43,11 @@ SETTINGS_COLOR_ITEMS = [
     ("hover", "悬停高亮色", False), ("accent", "强调色", False),
 ]
 
+COMPACT_COLOR_ITEMS = [
+    ("bg", "紧凑条背景色", True), ("text", "文字颜色", False),
+    ("hover", "悬停高亮色", False), ("accent", "强调色", False),
+]
+
 CUSTOM_ACTIONS = [("quick_record", "快速添加工作记录"),
                   ("quick_todo", "快速开始新工作"),
                   ("quick_recur", "快速添加循环任务"),
@@ -182,25 +187,19 @@ class SettingsWindow(FramelessDialog):
                         (self.rb_settings_theme, "theme_settings")]:
             b.toggled.connect(
                 lambda checked, k=kind: self._target_changed(k) if checked else None)
-        self.rb_compact_theme.toggled.connect(self._compact_target_changed)
+        self.rb_compact_theme.toggled.connect(
+            lambda checked: self._target_changed("compact_style") if checked else None)
         trow0.addWidget(self.rb_main_theme)
         trow0.addWidget(self.rb_settings_theme)
         trow0.addWidget(self.rb_compact_theme)
         trow0.addStretch()
         lay.addLayout(trow0)
 
-        # 主题编辑区 与 紧凑模式设置区 堆叠切换
-        self._personal_stack = QStackedWidget()
+        # 三主题共用同一编辑区（颜色/字体/字号/透明度/圆角/DIY/主题栏）
         theme_page = QWidget()
         tlay = QVBoxLayout(theme_page)
         tlay.setContentsMargins(0, 0, 0, 0)
-        compact_page = QWidget()
-        clay = QVBoxLayout(compact_page)
-        clay.setContentsMargins(0, 0, 0, 0)
-        self._personal_stack.addWidget(theme_page)
-        self._personal_stack.addWidget(compact_page)
-        lay.addWidget(self._personal_stack)
-        self._compact_page = compact_page
+        lay.addWidget(theme_page)
 
         self.color_hint = QLabel()
         tlay.addWidget(self.color_hint)
@@ -307,8 +306,10 @@ class SettingsWindow(FramelessDialog):
             trow.addWidget(b)
         tlay.addLayout(trow)
 
-        # 紧凑模式设置区（与主题编辑区堆叠切换）
-        self._page_compact(clay)
+        # 紧凑模式显示内容（仅紧凑模式主题可见）
+        self._compact_content = self._compact_content_widget()
+        self._compact_content.setVisible(False)
+        tlay.addWidget(self._compact_content)
 
         # 顶部时钟显示
         crow = QHBoxLayout()
@@ -337,19 +338,15 @@ class SettingsWindow(FramelessDialog):
             self.app.restart()
 
     def _target_changed(self, kind):
-        if self._kind == kind and (not hasattr(self, "_personal_stack")
-                                   or self._personal_stack.currentIndex() == 0):
+        """切换主题目标（桌面/设置栏/紧凑模式）：三个主题共用同一编辑区。"""
+        if self._kind == kind:
             return
         self._kind = kind
         self._edit = self.app.config.get(kind)
-        if hasattr(self, "_personal_stack"):
-            self._personal_stack.setCurrentIndex(0)
+        if hasattr(self, "font_size"):
+            # 紧凑模式字号 0=跟随桌面主题，滑条范围放宽
+            self.font_size.setRange(0 if kind == "compact_style" else 8, 48)
         QTimer.singleShot(0, self._apply_target_change)
-
-    def _compact_target_changed(self, checked):
-        """紧凑模式按钮：切换到紧凑设置区。"""
-        if checked and hasattr(self, "_personal_stack"):
-            self._personal_stack.setCurrentIndex(1)
 
     def _fmt_size(self, n: int) -> str:
         if n >= 1024 * 1024:
@@ -370,16 +367,24 @@ class SettingsWindow(FramelessDialog):
         Toast.show_text(tr("已清理 {n} 个图片缓存").replace("{n}", str(removed)))
 
     def _apply_target_change(self):
+        if hasattr(self, "_compact_content"):
+            self._compact_content.setVisible(self._kind == "compact_style")
         self._rebuild_color_grid()
         self._sync_controls()
         self._sync_diy_ui()
         self._apply_diy()
 
+    def _color_items(self):
+        return {"theme": MAIN_COLOR_ITEMS,
+                "theme_settings": SETTINGS_COLOR_ITEMS,
+                "compact_style": COMPACT_COLOR_ITEMS}.get(self._kind, SETTINGS_COLOR_ITEMS)
+
     def _rebuild_color_grid(self):
-        items = MAIN_COLOR_ITEMS if self._kind == "theme" else SETTINGS_COLOR_ITEMS
-        self.color_hint.setText(
-            tr("桌面应用主题界面颜色（点击色块或输入十六进制，支持屏幕吸管）")
-            if self._kind == "theme" else "")
+        items = self._color_items()
+        hint = {"theme": tr("桌面应用主题界面颜色（点击色块或输入十六进制，支持屏幕吸管）"),
+                "theme_settings": tr("设置栏主题界面颜色"),
+                "compact_style": tr("紧凑模式主题颜色（留空=跟随桌面主题）")}
+        self.color_hint.setText(hint.get(self._kind, ""))
         grid = self._color_grid
         while grid.count():
             item = grid.takeAt(0)
@@ -405,8 +410,12 @@ class SettingsWindow(FramelessDialog):
         self._syncing = True
         try:
             self.font_combo.setCurrentText(
-                self._edit.get("font_family", "Microsoft YaHei UI"))
-            self.font_size.setValue(int(self._edit.get("font_size", 10)))
+                self._edit.get("font_family") or
+                (self.app.config.get("theme", default={}).get("font_family")
+                 if self._kind == "compact_style" else "Microsoft YaHei UI"))
+            fs = int(self._edit.get("font_size", 0))
+            self.font_size.setRange(0 if self._kind == "compact_style" else 8, 48)
+            self.font_size.setValue(fs if self._kind == "compact_style" else fs or 10)
             self.alpha_slider.setValue(round(int(self._edit.get("bg_alpha", 208)) / 255 * 100))
             self.radius_slider.setValue(int(self._edit.get("radius", 12)))
             self._refresh_color_rows()
@@ -415,13 +424,20 @@ class SettingsWindow(FramelessDialog):
 
     def _refresh_color_rows(self):
         for key, (btn, hexedit) in self._color_btns.items():
-            val = self._edit.get(key, "#ffffff")
+            val = self._edit.get(key, "")
+            if not val and self._kind == "compact_style":
+                # 紧凑主题留空=跟随桌面主题：色块显示桌面主题对应色
+                val = (self.app.config.get("theme", default={}) or {}).get(key, "")
+            val = val or "#ffffff"
             btn.setStyleSheet(f"background-color:{val};border:1px solid rgba(128,128,128,120);"
                               f"border-radius:5px;")
             hexedit.setText(val.upper())
 
     def _pick_color(self, key):
-        c = ColorDialog.get_color(self, self.t, QColor(self._edit.get(key, "#ffffff")),
+        base = self._edit.get(key, "")
+        if not base and self._kind == "compact_style":
+            base = (self.app.config.get("theme", default={}) or {}).get(key, "#ffffff")
+        c = ColorDialog.get_color(self, self.t, QColor(base),
                                   with_alpha=False)
         if c:
             self._edit[key] = c.name()
@@ -451,6 +467,7 @@ class SettingsWindow(FramelessDialog):
                    ("reminder", "提醒栏"),
                    ("clock", "时钟面板"), ("dialog", "对话框")]
     DIY_SETTINGS = [("panel", "设置栏背景")]
+    DIY_COMPACT = [("compact", "紧凑条")]
 
     def _diy_cfg(self):
         return (self._edit or {}).get("diy_bg") or {}
@@ -464,7 +481,9 @@ class SettingsWindow(FramelessDialog):
         self._apply_diy()
 
     def _diy_components(self):
-        return self.DIY_DESKTOP if self._kind == "theme" else self.DIY_SETTINGS
+        return {"theme": self.DIY_DESKTOP,
+                "theme_settings": self.DIY_SETTINGS,
+                "compact_style": self.DIY_COMPACT}.get(self._kind, self.DIY_SETTINGS)
 
     def _apply_diy(self):
         cfg = self._diy_cfg()
@@ -472,6 +491,10 @@ class SettingsWindow(FramelessDialog):
             win = getattr(self.app, "win", None)
             if win is not None and hasattr(win, "apply_diy_bg"):
                 win.apply_diy_bg(cfg)
+        elif self._kind == "compact_style":
+            win = getattr(self.app, "win", None)
+            if win is not None:
+                win._apply_compact_style()
         else:
             # 设置栏 DIY 应用到本设置窗口自身
             self.apply_diy_settings(cfg)
@@ -576,6 +599,11 @@ class SettingsWindow(FramelessDialog):
         self.app.config.data[self._kind] = self._edit
         self.app.config.save()
         self.app.apply_theme(self._kind)
+        if self._kind == "compact_style":
+            win = getattr(self.app, "win", None)
+            if win is not None:
+                win._apply_compact_style()
+                win._update_compact_text()
         self._refresh_color_rows()
 
     def _refresh_theme_combo(self):
@@ -592,6 +620,11 @@ class SettingsWindow(FramelessDialog):
             self.app.config.data[self._kind] = self._edit
             self.app.config.save()
             self.app.apply_theme(self._kind)
+            if self._kind == "compact_style":
+                win = getattr(self.app, "win", None)
+                if win is not None:
+                    win._apply_compact_style()
+                    win._update_compact_text()
             self._sync_controls()
             self._sync_diy_ui()
             self._apply_diy()
@@ -599,6 +632,10 @@ class SettingsWindow(FramelessDialog):
 
     def _prune_theme_keys(self):
         if self._kind == "theme_settings":
+            for _k in ("done_text", "high", "mid", "low"):
+                self._edit.pop(_k, None)
+        elif self._kind == "compact_style":
+            # 紧凑主题字典不适用桌面主题专属键
             for _k in ("done_text", "high", "mid", "low"):
                 self._edit.pop(_k, None)
 
@@ -669,16 +706,21 @@ class SettingsWindow(FramelessDialog):
                         if part == "theme_settings":
                             for _k in ("done_text", "high", "mid", "low"):
                                 value.pop(_k, None)
+                    elif part == "compact_style":
+                        base_cfg = dict(self.app.config.get("compact_style", default={}))
+                        base_cfg.update(value or {})
+                        value = base_cfg
                     self.app.config.data[part] = value
-                    # 导入即保存进主题栏：桌面主题存原名，设置栏主题同名时加后缀
-                    if part in ("theme", "theme_settings"):
+                    # 导入即保存进主题栏：桌面主题存原名，设置栏/紧凑同名时加后缀
+                    if part in ("theme", "theme_settings", "compact_style"):
                         themes = self.app.config.get("saved_themes", default={})
                         nm = (value or {}).get("name") or tr("导入主题")
                         if part == "theme_settings":
-                            base = nm
-                            nm = base + tr("（设置栏）")
-                            while nm in themes:
-                                nm += "·"
+                            nm = nm + tr("（设置栏）")
+                        elif part == "compact_style":
+                            nm = nm + tr("（紧凑）")
+                        while nm in themes:
+                            nm += "·"
                         themes[nm] = copy.deepcopy(value)
                         self.app.config.set("saved_themes", themes)
                         imported_names.append(nm)
@@ -686,9 +728,9 @@ class SettingsWindow(FramelessDialog):
                 for part in chosen:
                     if part in ("theme", "theme_settings"):
                         self.app.apply_theme(part)
-                if "compact_style" in chosen:
-                    self.app.win._apply_compact_style()
-                    self.app.win._update_compact_text()
+                    elif part == "compact_style":
+                        self.app.win._apply_compact_style()
+                        self.app.win._update_compact_text()
                 self._edit = self.app.config.data.get(self._kind, self._edit)
                 self._sync_controls()
                 self._sync_diy_ui()
@@ -783,173 +825,36 @@ class SettingsWindow(FramelessDialog):
                                               asset.get("name", "background.png"))
         return value
 
-    # ================================================================ 紧凑模式美化
-    def _page_compact(self, lay):
-        """紧凑模式设置区（个性化页堆叠中的第三页）。"""
-        self._compact_cfg = dict(self.app.config.get("compact_style", default={}))
-        comps = self._compact_cfg.get("components") or []
-
+    # ================================================================ 紧凑显示内容
+    def _compact_content_widget(self):
+        """紧凑模式显示内容选择（仅紧凑模式主题显示）。"""
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        lay.setContentsMargins(0, 0, 0, 0)
         lay.addWidget(QLabel(tr("显示内容（可多选）")))
+        comps = self.app.config.get("compact_style", default={}).get("components") or []
         self._compact_boxes = []
         for key, label in (("clock", tr("时钟")),
                            ("offwork", tr("下班倒计时（时间在「提醒」页设置）")),
                            ("urgent", tr("最近事项倒计时"))):
             box = QCheckBox(label)
             box.setChecked(key in comps)
-            box.toggled.connect(self._compact_save)
+            box.toggled.connect(self._compact_content_save)
             lay.addWidget(box)
             self._compact_boxes.append((box, key))
-
-        lay.addSpacing(10)
-        lay.addWidget(QLabel(tr("样式")))
-        self._compact_btns = {}
-
-        # 文字颜色
-        row = QHBoxLayout()
-        row.addWidget(QLabel(tr("文字颜色")))
-        btn = QPushButton()
-        btn.setFixedSize(64, 26)
-        btn.setStyleSheet(
-            f"background-color:{self._compact_cfg.get('text_color') or '#ffffff'};"
-            f"border:1px solid rgba(128,128,128,120);border-radius:5px;")
-        btn.clicked.connect(lambda: self._compact_pick("text_color", btn))
-        row.addWidget(btn)
-        btn_clear = QPushButton(tr("清除"))
-        btn_clear.clicked.connect(lambda: self._compact_clear_color("text_color", btn))
-        row.addWidget(btn_clear)
-        row.addStretch()
-        lay.addLayout(row)
-        self._compact_btns["text_color"] = btn
-
-        # 界面字体
-        frow = QHBoxLayout()
-        frow.addWidget(QLabel(tr("界面字体")))
-        self._compact_family = QComboBox()
-        self._compact_family.addItems(QFontDatabase.families())
-        self._compact_family.setCurrentText(
-            self._compact_cfg.get("font_family") or self._edit.get("font_family", "Microsoft YaHei UI"))
-        self._compact_family.currentTextChanged.connect(self._compact_save)
-        frow.addWidget(self._compact_family, 1)
-        lay.addLayout(frow)
-
-        # 字号（滑条，0=跟随主题）
-        row = QHBoxLayout()
-        row.addWidget(QLabel(tr("文字大小（0=跟随主题）")))
-        self._compact_font = QSlider(Qt.Horizontal, minimum=0, maximum=48,
-                                     value=int(self._compact_cfg.get("font_size") or 0))
-        self._compact_font.valueChanged.connect(self._compact_save)
-        row.addWidget(self._compact_font, 1)
-        self._compact_font_lbl = QLabel(str(self._compact_font.value()))
-        self._compact_font.valueChanged.connect(
-            lambda v: self._compact_font_lbl.setText(str(v)))
-        row.addWidget(self._compact_font_lbl)
-        lay.addLayout(row)
-
-        # ---- 紧凑 DIY 背景模式（与主题 DIY 同形式）
-        diysep = QLabel(tr("DIY 背景模式"))
-        diysep.setStyleSheet(f"font-weight:bold;margin-top:10px;color:{self.t['accent']};")
-        lay.addWidget(diysep)
-        self._compact_diy_chk = QCheckBox(
-            tr("开启紧凑 DIY 背景（背景图片自定义紧凑条）"))
-        self._compact_diy_chk.setChecked(
-            bool((self._compact_cfg.get("diy") or {}).get("enabled")))
-        self._compact_diy_chk.toggled.connect(self._compact_diy_toggled)
-        lay.addWidget(self._compact_diy_chk)
-        self._compact_diy_box = QWidget()
-        dbox = QVBoxLayout(self._compact_diy_box)
-        dbox.setContentsMargins(0, 0, 0, 0)
-        drow = QHBoxLayout()
-        drow.addWidget(QLabel(tr("紧凑条背景")))
-        diy_comp = ((self.app.config.get("theme") or {}).get("diy_bg") or {}) \
-            .get("components", {}).get("compact") or {}
-        self._compact_diy_img_btn = QPushButton(tr("图片"))
-        self._compact_diy_img_btn.clicked.connect(self._compact_diy_pick_image)
-        drow.addWidget(self._compact_diy_img_btn)
-        self._compact_diy_alpha = QSlider(Qt.Horizontal, minimum=0, maximum=100,
-                                          value=int(diy_comp.get("alpha", 100)),
-                                          fixedWidth=110)
-        self._compact_diy_alpha.valueChanged.connect(self._compact_diy_alpha_changed)
-        drow.addWidget(self._compact_diy_alpha)
-        self._compact_diy_clear_btn = QPushButton(tr("清除"))
-        self._compact_diy_clear_btn.clicked.connect(self._compact_diy_clear)
-        drow.addWidget(self._compact_diy_clear_btn)
-        drow.addStretch()
-        dbox.addLayout(drow)
-        lay.addWidget(self._compact_diy_box)
-        self._compact_diy_box.setVisible(self._compact_diy_chk.isChecked())
-
         tip = QLabel(tr("提示：长按紧凑条可拖动，点击展开常规模式，边缘可横向缩放"))
         tip.setWordWrap(True)
         tip.setStyleSheet(f"color:{theme_mod.rgba(self.t['text'], 150)};")
         lay.addWidget(tip)
-        lay.addSpacing(40)
+        return w
 
-    def _compact_clear_color(self, key, btn):
-        self._compact_cfg[key] = ""
-        btn.setStyleSheet("background-color:#ffffff;"
-                          "border:1px solid rgba(128,128,128,120);border-radius:5px;")
-        self._compact_save()
-
-    def _compact_pick(self, key, btn):
-        c = ColorDialog.get_color(self, self.t,
-                                  QColor(self._compact_cfg.get(key) or "#ffffff"),
-                                  with_alpha=False)
-        if c:
-            self._compact_cfg[key] = c.name()
-            btn.setStyleSheet(f"background-color:{c.name()};"
-                              f"border:1px solid rgba(128,128,128,120);"
-                              f"border-radius:5px;")
-            self._compact_save()
-
-    def _compact_diy_cfg(self):
-        """紧凑条 DIY 背景绑定桌面主题（theme.diy_bg.components.compact）。"""
-        th = self.app.config.data.setdefault("theme", {})
-        db = th.setdefault("diy_bg", {})
-        comps = db.setdefault("components", {})
-        return comps.setdefault("compact", {})
-
-    def _compact_diy_save(self):
-        self._compact_cfg["diy"]["enabled"] = self._compact_diy_chk.isChecked()
-        self.app.config.save()      # 主题内嵌紧凑背景已写入 config.data
-        self._compact_save()
-
-    def _compact_diy_toggled(self, checked):
-        self._compact_diy_box.setVisible(checked)
-        self._compact_diy_save()
-
-    def _compact_diy_pick_image(self):
-        path, _ = QFileDialog.getOpenFileName(
-            self, tr("选择背景图片"), "", tr("图片文件") + " (*.png *.jpg *.jpeg *.bmp *.webp)")
-        if path:
-            saved = core.save_theme_image(path)
-            if saved:
-                old = self._compact_diy_cfg().get("image")
-                self._compact_diy_cfg().update(image=saved, color="")
-                core.remove_theme_image_if_unused(old, self.app.config.data)
-                self._refresh_cache_size()
-                self._compact_diy_save()
-
-    def _compact_diy_alpha_changed(self, v):
-        self._compact_diy_cfg()["alpha"] = v
-        self._compact_diy_save()
-
-    def _compact_diy_clear(self):
-        old = self._compact_diy_cfg().get("image")
-        self._compact_diy_cfg().clear()
-        self._compact_diy_cfg().update(alpha=100)
-        core.remove_theme_image_if_unused(old, self.app.config.data)
-        self._refresh_cache_size()
-        self._compact_diy_save()
-
-    def _compact_save(self, *_):
+    def _compact_content_save(self, *_):
         comps = [key for box, key in self._compact_boxes if box.isChecked()]
-        self._compact_cfg["components"] = comps
-        self._compact_cfg["font_size"] = self._compact_font.value()
-        self._compact_cfg["font_family"] = self._compact_family.currentText()
-        self.app.config.set("compact_style", dict(self._compact_cfg))
+        cfg = dict(self.app.config.get("compact_style", default={}))
+        cfg["components"] = comps
+        self.app.config.set("compact_style", cfg)
         win = getattr(self.app, "win", None)
         if win is not None:
-            win._apply_compact_style()
             win._update_compact_text()
 
     # ================================================================ 文件夹设置
