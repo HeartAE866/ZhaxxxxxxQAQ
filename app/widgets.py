@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import ctypes
 import os
-import traceback
 from ctypes import wintypes
 
 import theme as theme_mod

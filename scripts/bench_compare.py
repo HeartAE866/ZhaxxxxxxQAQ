@@ -1,4 +1,4 @@
-﻿"""Benchmark: 1.3.0beta3 vs 1.2.1 — memory / idle CPU / threads / size.
+﻿"""Benchmark: 1.3.0up(优化版) vs 1.2.1 — memory / idle CPU / threads / size.
 启动两个源码版（同一解释器），纯待机采样 10 轮，ctypes 读取进程指标。
 """
 import ctypes

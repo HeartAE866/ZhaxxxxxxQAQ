@@ -222,7 +222,10 @@ class ItemRow(QFrame):
         if color != getattr(self, "_soft_color", None):
             self._soft_color = color
             self.title_lbl.setStyleSheet(f"color:{color};")
-        self.time_lbl.setText(self.time_text())
+        tt = self.time_text()
+        if tt != getattr(self, "_soft_time", None):
+            self._soft_time = tt
+            self.time_lbl.setText(tt)
         if self.win.highlight_id == self.item["id"]:
             if not getattr(self, "_soft_hl", False):
                 self._soft_hl = True
@@ -471,11 +474,12 @@ class FloatWindow(_EdgeResizableMixin, QWidget):
         n = datetime.now()
         self.clock_time_lbl.setText(n.strftime("%H:%M:%S"))
         if current_lang() == "en":
-            self.clock_date_lbl.setText(
-                f"{WEEKDAYS_EN[n.weekday()]}, {n.year}-{n.month:02d}-{n.day:02d}")
+            date_txt = f"{WEEKDAYS_EN[n.weekday()]}, {n.year}-{n.month:02d}-{n.day:02d}"
         else:
-            self.clock_date_lbl.setText(
-                f"{n.year}年{n.month}月{n.day}日 星期{WEEKDAYS[n.weekday()]}")
+            date_txt = f"{n.year}年{n.month}月{n.day}日 星期{WEEKDAYS[n.weekday()]}"
+        if date_txt != getattr(self, "_last_date_txt", None):
+            self._last_date_txt = date_txt
+            self.clock_date_lbl.setText(date_txt)
         self._update_offwork()
 
     def _offwork_text(self, force: bool = False) -> str:
@@ -563,7 +567,9 @@ class FloatWindow(_EdgeResizableMixin, QWidget):
             self._update_clock()
 
     def _tick(self):
-        # 仅就地刷新逾期状态/时间文案，避免整窗重建造成瞬时闪烁
+        # 仅就地刷新逾期状态/时间文案（窗口隐藏时无需刷新，零开销）
+        if not self.isVisible():
+            return
         self.refresh(soft=True)
 
     # ---------------- 窗口状态

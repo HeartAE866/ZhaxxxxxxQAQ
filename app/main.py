@@ -512,6 +512,10 @@ class App(QObject):
 
     def refresh_priorities(self):
         changed = False
+        # 快速路径：无任何未完成且设了截止时间的待办时直接跳过
+        if not any(it.get("type") == "todo" and not it.get("done")
+                   and it.get("deadline") for it in self.store.items):
+            return
         for it in self.store.items:
             # 自动优先级只对「未完成且设了截止时间」的待办有意义，收窄扫描
             if it.get("type") == "todo" and not it.get("done") \

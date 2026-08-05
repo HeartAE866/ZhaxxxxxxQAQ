@@ -28,6 +28,22 @@ TIMEOUT = 8
 
 # 各版本更新日志（zh / en），新版本发布时在此追加条目；弹窗展示最近三个版本
 CHANGELOGS = {
+    "1.3.0up": {
+        "zh": "🚀 极致轻量化与三合一主题系统：\n"
+              "· 🎨 三合一主题：一个主题同时保存桌面+设置栏+紧凑模式全部设置，主题栏统一入口\n"
+              "· 🧹 极低占用：实测待机内存 85MB（1.2.1 为 329MB，-74%）、待机 CPU 60s 仅 0.1s\n"
+              "· ⏱ 消灭冗余轮询：窗口隐藏零刷新、无截止待办跳过扫描、时钟日期/行内时间缓存\n"
+              "· 📦 修复安装目录重复嵌套（-68MB），安装包 21.7MB\n"
+              "· 🐛 修复：切换主题紧凑图片背景残留、删除主题后界面不变\n"
+              "· 🎨 全新主题化输入对话框（保存主题/重命名规则等），告别白底白字",
+        "en": "🚀 Ultra-lightweight & unified 3-in-1 themes:\n"
+              "· 🎨 3-in-1 themes: one theme saves desktop+settings+compact styles; single entry\n"
+              "· 🧹 Ultra-low footprint: idle mem 85MB vs 329MB (1.2.1, -74%); idle CPU 0.1s/60s\n"
+              "· ⏱ Removed redundant polling: zero refresh when hidden, skip scans when nothing due\n"
+              "· 📦 Fixed nested install dir duplication (-68MB); installer 21.7MB\n"
+              "· 🐛 Fixed: compact bg image lingering on theme switch; delete theme not applying\n"
+              "· 🎨 Themed input dialogs (save theme / rename rules) — no more white-on-white",
+    },
     "1.3.0beta3": {
         "zh": "⚡ 性能与体验优化：\n"
               "· ⚡ 深度优化：清除死代码与冗余（-400+ 行），常驻待机 CPU 近 0%、内存更紧凑\n"
