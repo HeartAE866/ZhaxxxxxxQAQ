@@ -647,7 +647,7 @@ class FloatWindow(_EdgeResizableMixin, QWidget):
         radius = self.t.get("radius", 12)
         targets = [("panel", self.panel), ("header", self.header),
                    ("reminder", self.reminder_panel),
-                   ("clock", self.clock_panel), ("compact", self.compact_bar)]
+                   ("clock", self.clock_panel)]   # compact 由 _apply_compact_style 管理
         for key, w in targets:
             c = (comps.get(key) or {}) if enabled else {}
             color = c.get("color") or ""
@@ -774,8 +774,8 @@ class FloatWindow(_EdgeResizableMixin, QWidget):
         return parts
 
     def _apply_compact_style(self):
-        """应用紧凑模式样式：文字颜色/字号/字体（0=跟随主题）、背景色/图片/透明度、
-        DIY 背景优先。"""
+        """应用紧凑模式样式：文字颜色/字号/字体（0=跟随主题）、背景图片/透明度。
+        紧凑背景绑定主题（theme.diy_bg.components.compact），随主题切换。"""
         cfg = self.app.config.get("compact_style", default={})
         ss = []
         if cfg.get("text_color"):
@@ -788,13 +788,15 @@ class FloatWindow(_EdgeResizableMixin, QWidget):
         if fam:
             ss.append(f"font-family:'{fam}';")
         self.compact_lbl.setStyleSheet("".join(ss))
+        # 紧凑条背景：开启紧凑 DIY 时使用主题内嵌的紧凑背景（随主题切换）
         diy = cfg.get("diy") or {}
         if diy.get("enabled"):
-            c = (diy.get("components") or {}).get("compact") or {}
-            self.compact_bar.set_bg("", c.get("image") or "",
-                                    int(c.get("alpha", 100)))
+            th = self.app.config.get("theme") or {}
+            comp = ((th.get("diy_bg") or {}).get("components") or {}).get("compact") or {}
+            self.compact_bar.set_bg("", comp.get("image") or "",
+                                    int(comp.get("alpha", 100)))
         else:
-            # 紧凑主题不再单独保存背景颜色/图片，未启用 DIY 时跟随主题背景。
+            # 未开启紧凑 DIY：跟随主题背景（QSS FrostedPanel）
             self.compact_bar.set_bg("", "", 100)
 
     def _update_compact_text(self):

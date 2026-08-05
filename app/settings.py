@@ -860,8 +860,8 @@ class SettingsWindow(FramelessDialog):
         dbox.setContentsMargins(0, 0, 0, 0)
         drow = QHBoxLayout()
         drow.addWidget(QLabel(tr("紧凑条背景")))
-        diy_comp = (self._compact_cfg.get("diy") or {}).get("components", {}) \
-            .get("compact") or {}
+        diy_comp = ((self.app.config.get("theme") or {}).get("diy_bg") or {}) \
+            .get("components", {}).get("compact") or {}
         self._compact_diy_img_btn = QPushButton(tr("图片"))
         self._compact_diy_img_btn.clicked.connect(self._compact_diy_pick_image)
         drow.addWidget(self._compact_diy_img_btn)
@@ -902,13 +902,15 @@ class SettingsWindow(FramelessDialog):
             self._compact_save()
 
     def _compact_diy_cfg(self):
-        diy = self._compact_cfg.setdefault("diy", {})
-        diy.setdefault("components", {})
-        diy["components"].setdefault("compact", {})
-        return diy["components"]["compact"]
+        """紧凑条 DIY 背景绑定桌面主题（theme.diy_bg.components.compact）。"""
+        th = self.app.config.data.setdefault("theme", {})
+        db = th.setdefault("diy_bg", {})
+        comps = db.setdefault("components", {})
+        return comps.setdefault("compact", {})
 
     def _compact_diy_save(self):
         self._compact_cfg["diy"]["enabled"] = self._compact_diy_chk.isChecked()
+        self.app.config.save()      # 主题内嵌紧凑背景已写入 config.data
         self._compact_save()
 
     def _compact_diy_toggled(self, checked):

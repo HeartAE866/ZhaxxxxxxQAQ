@@ -269,8 +269,7 @@ DEFAULT_CONFIG = {
         "text_color": "",
         "font_family": "",
         "font_size": 0,
-        "diy": {"enabled": False,
-                "components": {"compact": {"color": "", "image": "", "alpha": 100}}},
+        "diy": {"enabled": False},
     },
     "hotkeys": {
         "settings": ["ctrl", "shift", "z", "x"],
@@ -313,6 +312,16 @@ class Config:
         for top, dst in (("diy_bg", "theme"), ("diy_bg_settings", "theme_settings")):
             if top in self.data and self.data[top]:
                 self.data.setdefault(dst, {})["diy_bg"] = self.data.pop(top)
+        # 紧凑 DIY 背景并入桌面主题（v1.3.0beta3 及以前：compact_style.diy.components.compact）
+        cs = self.data.get("compact_style") or {}
+        cd = cs.get("diy") or {}
+        comp = (cd.get("components") or {}).get("compact") or {}
+        if comp.get("image") or comp.get("color"):
+            th = self.data.setdefault("theme", {})
+            db = th.setdefault("diy_bg", {})
+            db.setdefault("components", {})["compact"] = {
+                k: comp.get(k, "") for k in ("image", "color", "alpha")
+            }
 
     def _migrate_theme_images(self):
         """把旧配置中的外部主题图片迁移到应用数据目录。"""
@@ -324,6 +333,10 @@ class Config:
                 for key, item in list(value.items()):
                     if key in ("image", "bg_image") and isinstance(item, str) \
                             and item and os.path.isfile(item):
+                        # 已在应用数据目录的图片不再迁移（避免重复复制换名）
+                        if os.path.abspath(item).startswith(
+                                os.path.abspath(THEME_ASSET_DIR)):
+                            continue
                         saved = save_theme_image(item)
                         if saved and os.path.abspath(saved) != os.path.abspath(item):
                             value[key] = saved
