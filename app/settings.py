@@ -15,7 +15,6 @@ from PySide6.QtCore import QTimer, Qt, Signal
 from PySide6.QtGui import QColor, QFontDatabase, QGuiApplication, QPixmap
 from PySide6.QtWidgets import (QButtonGroup, QCheckBox, QComboBox, QDialog,
                                QFileDialog, QFrame, QGridLayout, QHBoxLayout, QLabel,
-                               QDialogButtonBox,
                                QLineEdit, QListWidget, QListWidgetItem,
                                QPushButton, QScrollArea, QSizePolicy, QSlider,
                                QSpinBox,
@@ -770,10 +769,8 @@ class SettingsWindow(FramelessDialog):
         Toast.show_text(tr("已导出到 导出 目录"))
 
     def _choose_theme_parts(self, title, available):
-        """多选主题组成：桌面、设置栏、紧凑模式。"""
-        d = QDialog(self)
-        d.setWindowTitle(title)
-        lay = QVBoxLayout(d)
+        """多选主题组成：桌面、设置栏、紧凑模式（主题化对话框）。"""
+        d = FramelessDialog(self, self.t, title, width=380)
         boxes = []
         labels = {
             "theme": tr("桌面应用主题"),
@@ -783,12 +780,18 @@ class SettingsWindow(FramelessDialog):
         for part in available:
             box = QCheckBox(labels.get(part, part))
             box.setChecked(True)
-            lay.addWidget(box)
+            d.body.addWidget(box)
             boxes.append((part, box))
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(d.accept)
-        buttons.rejected.connect(d.reject)
-        lay.addWidget(buttons)
+        row = QHBoxLayout()
+        row.addStretch()
+        btn_no = QPushButton(tr("取消"))
+        btn_no.clicked.connect(d.reject)
+        btn_ok = QPushButton(tr("确定"), objectName="AccentButton")
+        btn_ok.clicked.connect(d.accept)
+        row.addWidget(btn_no)
+        row.addWidget(btn_ok)
+        d.body.addLayout(row)
+        btn_ok.setDefault(True)
         if d.exec() != QDialog.Accepted:
             return []
         return [part for part, box in boxes if box.isChecked()]
