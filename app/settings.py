@@ -629,8 +629,14 @@ class SettingsWindow(FramelessDialog):
         self.app.config.data["theme"] = copy.deepcopy(entry.get("theme") or {})
         self.app.config.data["theme_settings"] = copy.deepcopy(
             entry.get("theme_settings") or dict(theme_mod.DEFAULT_THEME_SETTINGS))
-        self.app.config.data["compact_style"] = copy.deepcopy(
-            entry.get("compact_style") or dict(self.app.config.get("compact_style", default={})))
+        if entry.get("compact_style"):
+            # 主题自带紧凑配置（含图片背景）：整体替换
+            cs = copy.deepcopy(entry["compact_style"])
+            self.app.config.data["compact_style"] = cs
+        else:
+            # 主题无紧凑配置（默认条目/旧主题）：重置为干净的默认结构（清掉图片背景）
+            self.app.config.data["compact_style"] = copy.deepcopy(
+                core.DEFAULT_CONFIG["compact_style"])
         self.app.config.save()
         self.app.apply_theme("all")
         self._edit = self.app.config.data.get(self._kind, self._edit)
