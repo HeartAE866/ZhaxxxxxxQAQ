@@ -11,6 +11,22 @@ A frameless, frosted-glass floating widget on your desktop: auto-created project
 ![Python](https://img.shields.io/badge/Python-3.14+-8A2BE2)
 ![PySide6](https://img.shields.io/badge/UI-PySide6-4fc3f7)
 
+---
+
+## 📥 立即下载 / Download
+
+> 👇 **两步搞定：点下面的链接 → 下载 → 双击运行。** Windows 10/11（64 位）。
+
+| 版本 | 下载 | 说明 |
+|---|---|---|
+| ✅ **Portable 版（推荐）** | [⬇️ 从 GitHub 下载](https://github.com/HeartAE866/ZhaxxxxxxQAQ/releases/latest/download/ZhaxxxxxxQAQ_Portable_v1.3.0.zip) · [🇨🇳 Gitee 下载](https://gitee.com/HeartAE86/ZhaxxxxxxQAQ/releases) | **免安装**：解压后双击 `ZhaxxxxxxQAQ.exe` 即可使用；数据保存在解压目录内，U 盘 / 网盘随身携带 |
+| 📦 **安装版** | [⬇️ 从 GitHub 下载](https://github.com/HeartAE866/ZhaxxxxxxQAQ/releases/latest/download/ZhaxxxxxxQAQ_Setup_v1.3.0.exe) · [🇨🇳 Gitee 下载](https://gitee.com/HeartAE86/ZhaxxxxxxQAQ/releases) | 传统安装：可选开机自启、桌面快捷方式、自定义安装路径；自带干净卸载器 |
+
+> 💡 **推荐 Portable 版**：无需安装、无残留，想用就双击，想走就带走。
+> GitHub 打不开？直接用上面 🇨🇳 Gitee 链接。
+
+---
+
 ![English UI](docs/screenshots/main_en.png)
 
 ![中文界面](docs/screenshots/main_zh.png)

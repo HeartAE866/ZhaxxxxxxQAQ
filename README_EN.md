@@ -10,6 +10,22 @@ A frameless, frosted-glass floating widget that sits on your desktop: work logs,
 
 > 🌐 中文介绍请看 [README.md](README.md)
 
+---
+
+## 📥 Download
+
+> 👇 **Two steps: click a link → download → double-click to run.** Windows 10/11 (64-bit).
+
+| Version | Download | Notes |
+|---|---|---|
+| ✅ **Portable (Recommended)** | [⬇️ GitHub](https://github.com/HeartAE866/ZhaxxxxxxQAQ/releases/latest/download/ZhaxxxxxxQAQ_Portable_v1.3.0.zip) · [🇨🇳 Gitee](https://gitee.com/HeartAE86/ZhaxxxxxxQAQ/releases) | **No install**: extract and double-click `ZhaxxxxxxQAQ.exe`; data lives in the folder — carry it on a USB stick |
+| 📦 **Installer** | [⬇️ GitHub](https://github.com/HeartAE866/ZhaxxxxxxQAQ/releases/latest/download/ZhaxxxxxxQAQ_Setup_v1.3.0.exe) · [🇨🇳 Gitee](https://gitee.com/HeartAE86/ZhaxxxxxxQAQ/releases) | Traditional install: auto-start, desktop shortcut, custom path, clean uninstaller |
+
+> 💡 **Portable is recommended**: no installation, no leftovers — double-click to use, delete to remove.
+> GitHub blocked? Use the 🇨🇳 Gitee links above.
+
+---
+
 ![Main Window](docs/screenshots/main_en.png)
 
 ## ✨ Killer Feature: Auto-Created Project Folders, One-Click Access
