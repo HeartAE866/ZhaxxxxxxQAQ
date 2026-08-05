@@ -48,12 +48,19 @@ A frameless, frosted-glass floating widget that sits on your desktop: work logs,
 
 Download the latest installer from [Releases](https://github.com/HeartAE866/ZhaxxxxxxQAQ/releases)
 (`ZhaxxxxxxQAQ_Setup_v1.3.0.exe`) and run it.
+During install you can choose Simplified Chinese / English, pick the install path,
+and decide whether to create a desktop shortcut or enable auto-start.
 
 **For users in China**: if GitHub is slow or unreachable, use the domestic mirror repository
 [Gitee Mirror](https://gitee.com/HeartAE86/ZhaxxxxxxQAQ) (search "Gitee ZhaxxxxxxQAQ" to find it);
 the in-app auto-update switches to the China mirror automatically — no VPN needed.
 
-> Windows 10/11 (64-bit). Fully offline — uninstall by deleting the app folder.
+**Portable build**: a no-install `ZhaxxxxxxQAQ_Portable_v1.3.0.zip` is also provided —
+extract and run; data lives inside the extracted folder.
+
+> Windows 10/11 (64-bit). Fully offline — no network, no tracking.
+> Uninstall: run "Uninstall ZhaxxxxxxQAQ" from the Start Menu or the app folder;
+> it closes the app and removes all data, auto-start entry and registry keys — nothing left behind.
 
 ## Run from Source (Development)
 

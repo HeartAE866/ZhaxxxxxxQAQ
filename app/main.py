@@ -68,8 +68,11 @@ class App(QObject):
         self.remind_timer.start()
         self.refresh_priorities()
 
-        # 首次运行：开启自启
-        if self.config.get("autostart", default=True) and not core.autostart_enabled():
+        # 首次运行：开启自启（仅安装版；portable 免安装不写注册表）
+        is_portable = getattr(sys, "frozen", False) \
+            and not os.path.exists(os.path.join(core.ROOT, "installed.txt"))
+        if not is_portable and self.config.get("autostart", default=True) \
+                and not core.autostart_enabled():
             core.set_autostart(True)
         log.info(f"{core.APP_NAME} v{core.APP_VERSION} 启动")
 

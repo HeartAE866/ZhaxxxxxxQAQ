@@ -28,61 +28,23 @@ TIMEOUT = 8
 
 # 各版本更新日志（zh / en），新版本发布时在此追加条目；弹窗展示最近三个版本
 CHANGELOGS = {
-    "1.3.0up": {
-        "zh": "🚀 极致轻量化与三合一主题系统：\n"
-              "· 🎨 三合一主题：一个主题同时保存桌面+设置栏+紧凑模式全部设置，主题栏统一入口\n"
-              "· 🧹 极低占用：实测待机内存 85MB（1.2.1 为 329MB，-74%）、待机 CPU 60s 仅 0.1s\n"
-              "· ⏱ 消灭冗余轮询：窗口隐藏零刷新、无截止待办跳过扫描、时钟日期/行内时间缓存\n"
-              "· 📦 修复安装目录重复嵌套（-68MB），安装包 21.7MB\n"
-              "· 🐛 修复：切换主题紧凑图片背景残留、删除主题后界面不变\n"
+    "1.3.0": {
+        "zh": "🎉 主题系统大升级与稳定性优化：\n"
+              "· 🎨 三合一主题：一个主题同时保存桌面+设置栏+紧凑模式全部设置，切换主题三者同步生效\n"
+              "· 📏 记忆窗口尺寸与展开状态：自定义高度、项目栏/循环任务/网址直达收展状态重启后保持\n"
+              "· 🔗 新增网址直达：行首自定义颜色色条、一键打开（无协议自动补全 https://）\n"
+              "· ↔ 提醒、循环任务、网址直达支持自由拖拽排序（持久保存）\n"
+              "· 🖱 设置栏滚轮防误触、紧凑模式体验完善（背景图片/透明度/内容自定义）\n"
+              "· 🐛 修复：幽灵窗口、提醒「不提醒」选项失效、拖拽排序错乱、编辑循环任务崩溃等\n"
               "· 🎨 全新主题化输入对话框（保存主题/重命名规则等），告别白底白字",
-        "en": "🚀 Ultra-lightweight & unified 3-in-1 themes:\n"
-              "· 🎨 3-in-1 themes: one theme saves desktop+settings+compact styles; single entry\n"
-              "· 🧹 Ultra-low footprint: idle mem 85MB vs 329MB (1.2.1, -74%); idle CPU 0.1s/60s\n"
-              "· ⏱ Removed redundant polling: zero refresh when hidden, skip scans when nothing due\n"
-              "· 📦 Fixed nested install dir duplication (-68MB); installer 21.7MB\n"
-              "· 🐛 Fixed: compact bg image lingering on theme switch; delete theme not applying\n"
-              "· 🎨 Themed input dialogs (save theme / rename rules) — no more white-on-white",
-    },
-    "1.3.0beta3": {
-        "zh": "⚡ 性能与体验优化：\n"
-              "· ⚡ 深度优化：清除死代码与冗余（-400+ 行），常驻待机 CPU 近 0%、内存更紧凑\n"
-              "· ⏱ 合并后台定时器、缓存时间解析与样式刷新——操作更丝滑\n"
-              "· 📦 精简依赖与打包排除（PySide6-Essentials），安装包保持轻量\n"
-              "· 🐛 修复：父目录不存在时点击文件夹图标无反应——提示并一键直达设置页修正",
-        "en": "⚡ Performance & UX polish:\n"
-              "· ⚡ Deep cleanup: removed dead/redundant code (-400+ lines); near-zero idle CPU, tighter memory\n"
-              "· ⏱ Merged background timers, cached time parsing & style refresh — smoother interactions\n"
-              "· 📦 Slimmed dependencies & build excludes (PySide6-Essentials), lean installer\n"
-              "· 🐛 Fixed: clicking folder icon did nothing when base folder is invalid — now prompts and jumps to Settings",
-    },
-    "1.3.0beta": {
-        "zh": "🧟 幽灵窗口彻底根治：\n"
-              "· 🐛 修复：操作时屏幕中央一闪而过的幽灵窗口——重建时容器未父化即被系统显示为独立窗口；任何操作（添加/删除/拖拽/搜索/设置/重启）不再闪烁\n"
-              "· 📏 新增：记忆窗口尺寸——用户自定义窗口高度后不再被操作重置，重启后保持\n"
-              "· 📑 新增：记忆展开状态——项目栏/循环任务/网址直达的收展状态重启后保持\n"
-              "· 🖱 操作提示恢复：右上角 Toast 提示恢复（与幽灵窗口无关）\n"
-              "· 🔗 新增网址直达：行首自定义颜色色条、🌐 一键打开（无协议自动补全 https://）\n"
-              "· 🖱 设置栏滚轮防误触：滑条/下拉框滚动不再误改数值\n"
-              "· ↔ 提醒、循环任务、网址直达均支持自由拖拽排序（持久保存）\n"
-              "· 🐛 修复：内容超高时窗口最高可能超出屏幕底部（按窗口位置收紧上限）\n"
-              "· ⌨ 全局快捷键改为键盘钩子：替代 50ms 轮询，待机 CPU 占用实测为 0%\n"
-              "· 🐛 修复：更新检查实际不可用（缺少 OpenSSL 运行库导致 https 失效），现已恢复\n"
-              "· 🐛 修复：启动器（.bat/.vbs）找不到运行环境的问题\n"
-              "· 🧹 清理无用依赖：安装包体积进一步精简",
-        "en": "🧟 Ghost window completely eliminated:\n"
-              "· 🐛 Fixed: ghost windows flashing at screen center on every action (containers were shown before being parented during rebuild); no more flicker on add/delete/drag/search/settings/restart\n"
-              "· 📏 New: window size memory — custom window height is kept across operations and restarts\n"
-              "· 📑 New: collapse state memory — year/month groups, recurring tasks & quick links keep their open/closed state after restart\n"
-              "· 🖱 Restored: corner Toast notifications (unrelated to ghost windows)\n"
+        "en": "🎉 Theme system overhaul & stability improvements:\n"
+              "· 🎨 3-in-1 themes: one theme saves desktop+settings+compact styles; switch applies all\n"
+              "· 📏 Window size & collapse state memory across restarts\n"
               "· 🔗 New Quick Link type: custom color strip, one-click open (auto https://)\n"
-              "· 🖱 Wheel guard in Settings: sliders/dropdowns no longer change values on scroll\n"
-              "· ↔ Reminders, recurring tasks & quick links all support free drag-sorting (persisted)\n"
-              "· 🐛 Fixed: window could extend below the screen when content is too tall\n"
-              "· ⌨ Global hotkeys via keyboard hook: replaces 50ms polling, idle CPU measured at 0%\n"
-              "· 🐛 Fixed: update check was actually broken (missing OpenSSL DLLs), now restored\n"
-              "· 🐛 Fixed: launchers (.bat/.vbs) failing to find the runtime\n"
-              "· 🧹 Removed unused dependencies: smaller package",
+              "· ↔ Reminders, recurring tasks & quick links support drag-sorting (persisted)\n"
+              "· 🖱 Wheel guard in Settings; polished compact mode (bg image/opacity/content)\n"
+              "· 🐛 Fixed: ghost windows, \"no reminder\" option, drag-sort glitch, recurring edit crash\n"
+              "· 🎨 Themed input dialogs — no more white-on-white",
     },
     "1.2.1": {
         "zh": "🇨🇳 国内镜像与多项修复：\n"

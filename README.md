@@ -101,13 +101,17 @@ the in-app auto-update switches to the China mirror automatically — no VPN nee
 ### 安装
 
 在 [Releases](https://github.com/HeartAE866/ZhaxxxxxxQAQ/releases) 下载最新版安装包
-（`ZhaxxxxxxQAQ_Setup_v1.2.1.exe`），双击安装即可。
+（`ZhaxxxxxxQAQ_Setup_v1.3.0.exe`），双击安装即可。
+安装时可选择简体中文 / English、自定义安装路径、选择是否创建桌面快捷方式与开机自启。
 
 **国内用户**：GitHub 访问不畅时，可到国内镜像仓库下载：
 [Gitee 镜像仓库](https://gitee.com/HeartAE86/ZhaxxxxxxQAQ)（浏览器搜索「Gitee ZhaxxxxxxQAQ」也能找到）；
 软件内的自动更新会自动切换国内镜像源，无需科学上网。
 
-> Windows 10/11（64 位）。完全本地离线，卸载只需删除安装目录。
+**Portable 版**：同时提供免安装的 `ZhaxxxxxxQAQ_Portable_v1.3.0.zip`，解压即可运行，数据保存在解压目录内，方便携带。
+
+> Windows 10/11（64 位）。完全本地离线，不联网不收集任何信息。
+> 卸载：使用安装目录或开始菜单中的「卸载 ZhaxxxxxxQAQ」，卸载时会自动关闭应用并彻底清理数据、开机自启与注册表项，无任何残留。
 
 ---
 
