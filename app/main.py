@@ -40,8 +40,10 @@ class App(QObject):
         self.lock = QLockFile(os.path.join(_lock_dir, "app.lock"))
         self.lock.setStaleLockTime(3000)  # 3秒后认为锁文件过期
         if not self.lock.tryLock(3000):
-            log("单实例锁：已有另一个实例在运行，退出。")
-            sys.exit(0)
+            log.info("单实例锁：已有另一个实例在运行，退出。")
+            # os._exit 立即终止：避免 QApplication 已创建时 sys.exit 的
+            # SystemExit 被 Qt 清理阶段阻塞，导致第二实例进程残留
+            os._exit(0)
 
         self.config = core.Config()
         i18n.set_lang(self.config.get("language", default="zh"))
@@ -68,12 +70,9 @@ class App(QObject):
         self.remind_timer.start()
         self.refresh_priorities()
 
-        # 首次运行：开启自启（仅安装版；portable 免安装不写注册表）
-        is_portable = getattr(sys, "frozen", False) \
-            and not os.path.exists(os.path.join(core.ROOT, "installed.txt"))
-        if not is_portable and self.config.get("autostart", default=True) \
-                and not core.autostart_enabled():
-            core.set_autostart(True)
+        # 开机自启：不自动写入注册表（避免未签名程序首次运行写 Run 项
+        # 被 Defender 的 ML 行为检测误报为持久化威胁）。
+        # 仅当用户主动开启（安装器勾选自启，或在设置中勾选）时才写入。
         log.info(f"{core.APP_NAME} v{core.APP_VERSION} 启动")
 
         # 自动更新检查（启动 4 秒后静默进行）

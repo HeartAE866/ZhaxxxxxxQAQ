@@ -286,7 +286,7 @@ DEFAULT_CONFIG = {
         "click_through": ["ctrl", "shift", "z", "p"],
         "custom": {}          # {"quick_record": [...], "quick_todo": [...], ...}
     },
-    "autostart": True,
+    "autostart": False,   # 默认不开机自启（用户主动勾选才写注册表）
 }
 
 
