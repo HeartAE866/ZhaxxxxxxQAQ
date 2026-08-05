@@ -144,8 +144,7 @@ class ItemEditDialog(FramelessDialog):
             tl = QHBoxLayout(self.time_row)
             tl.setContentsMargins(0, 0, 0, 0)
             try:
-                _th, _tm = str(r.get("time", "09:00")).split(":")
-                _th, _tm = int(_th), int(_tm)
+                _th, _tm = core.parse_hm(str(r.get("time", "09:00")))
             except Exception:
                 _th, _tm = 9, 0
             self.recur_hour = QComboBox()
@@ -173,7 +172,10 @@ class ItemEditDialog(FramelessDialog):
                       ("星期五", 4), ("星期六", 5), ("星期日", 6))
             for text, i in wd_items:
                 self.weekday.addItem(text, i)
-            self.weekday.setCurrentIndex(r.get("weekday", datetime.now().weekday()))
+            wd = r.get("weekday")
+            self.weekday.setCurrentIndex(
+                wd if isinstance(wd, int) and 0 <= wd <= 6
+                else datetime.now().weekday())
             lbl = QLabel(tr("星期"))
             lbl.setFixedWidth(64)
             wl.addWidget(lbl)
@@ -186,8 +188,10 @@ class ItemEditDialog(FramelessDialog):
             dl.setContentsMargins(0, 0, 0, 0)
             self.monthday = QComboBox()
             self.monthday.addItems([str(i) for i in range(1, 32)])
+            md = r.get("monthday")
             self.monthday.setCurrentIndex(
-                max(0, int(r.get("monthday", datetime.now().day)) - 1))
+                max(0, int(md) - 1) if isinstance(md, int) and 1 <= md <= 31
+                else datetime.now().day - 1)
             lbl2 = QLabel(tr("日期(日)"))
             lbl2.setFixedWidth(64)
             dl.addWidget(lbl2)
@@ -200,8 +204,10 @@ class ItemEditDialog(FramelessDialog):
             yl.setContentsMargins(0, 0, 0, 0)
             self.month = QComboBox()
             self.month.addItems([str(i) for i in range(1, 13)])
+            mo = r.get("month")
             self.month.setCurrentIndex(
-                max(0, int(r.get("month", datetime.now().month)) - 1))
+                max(0, int(mo) - 1) if isinstance(mo, int) and 1 <= mo <= 12
+                else datetime.now().month - 1)
             lbl3 = QLabel(tr("月份(月)"))
             lbl3.setFixedWidth(64)
             yl.addWidget(lbl3)
@@ -347,7 +353,7 @@ class ItemEditDialog(FramelessDialog):
             else:
                 it["deadline"] = None
             adv = self.advance.currentData()
-            it["remind_advance"] = None if adv == -1 else adv
+            it["remind_advance"] = adv   # -1 = 不提醒（保留原值，避免与"未设置"混淆）
         if self.item_type == "recur":
             p = self.period.currentData()
             if p == "long":

@@ -3,10 +3,6 @@
 折叠/展开、拖拽排序、搜索、边缘缩放、紧凑模式。"""
 from __future__ import annotations
 
-import ctypes
-import os
-import traceback
-from ctypes import wintypes
 from datetime import date, datetime, timedelta
 
 from PySide6.QtCore import QEvent, QRect, Qt, QTimer
@@ -492,7 +488,7 @@ class FloatWindow(_EdgeResizableMixin, QWidget):
         if cfg.get("weekdays_only", True) and n.weekday() >= 5:
             return tr("休息日")
         try:
-            hh, mm = [int(x) for x in str(cfg.get("time", "18:00")).split(":")]
+            hh, mm = core.parse_hm(str(cfg.get("time", "18:00")), default=(18, 0))
         except Exception:
             hh, mm = 18, 0
         target = n.replace(hour=hh, minute=mm, second=0, microsecond=0)
@@ -1086,6 +1082,7 @@ class FloatWindow(_EdgeResizableMixin, QWidget):
         if self.app.config.get("window", "locked"):
             return
         self._drag_row = row
+        self._insert_at = None
         name = row.objectName() or "ItemRow"
         row.setStyleSheet(
             f"#{name}{{background-color:{theme_mod.rgba(self.t['accent'],60)};"
@@ -1144,7 +1141,8 @@ class FloatWindow(_EdgeResizableMixin, QWidget):
             self.refresh()
             return
         src = group.index(row.item)
-        dst = getattr(self, "_insert_at", src)
+        dst = self._insert_at if self._insert_at is not None else src
+        self._insert_at = None   # 复位，防止下次轻点误用旧值
         # _insert_at 是布局索引（含非同类行），换算到同类序列
         dst_idx = 0
         for i, r in enumerate(rows):

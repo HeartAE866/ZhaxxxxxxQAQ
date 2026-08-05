@@ -412,6 +412,8 @@ class FramelessDialog(_EdgeResizableMixin, QDialog):
         self.panel.setMouseTracking(True)
         self.panel.installEventFilter(self)
         self._diy_timer = QTimer(self, interval=500, timeout=self._live_diy)
+        # 窗口销毁时清理圆角缓存，防止 hwnd 被系统复用后误跳过圆角
+        self.destroyed.connect(lambda _=None: _rounded_cache.clear())
 
     def _find_diy_app(self):
         """向上找持有 app 的父级（只找一次，之后缓存）。"""
@@ -585,7 +587,6 @@ class InputDialog(FramelessDialog):
         super().__init__(parent, t, title, width=420)
         ql = QLabel(label)
         self.body.addWidget(ql)
-        self._item_ok = False
         self._combo = None
         self._line = None
         if items:

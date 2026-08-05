@@ -17,7 +17,6 @@ from PySide6.QtWidgets import (QButtonGroup, QCheckBox, QComboBox, QDialog,
                                QFileDialog, QFrame, QGridLayout, QHBoxLayout, QLabel,
                                QLineEdit, QListWidget, QListWidgetItem,
                                QPushButton, QScrollArea, QSizePolicy, QSlider,
-                               QSpinBox,
                                QStackedWidget, QTextEdit, 
                                QTreeWidget, QTreeWidgetItem, QVBoxLayout,
                                QWidget)
@@ -271,7 +270,6 @@ class SettingsWindow(FramelessDialog):
         dbox.addWidget(dlab)
         self.diy_grid = QGridLayout()
         self.diy_grid.setHorizontalSpacing(6)
-        self._diy_btns = {}
         self._rebuild_diy_grid()
         dbox.addLayout(self.diy_grid)
         tlay.addWidget(self.diy_box)
@@ -533,7 +531,6 @@ class SettingsWindow(FramelessDialog):
             it = self.diy_grid.takeAt(0)
             if it.widget():
                 it.widget().deleteLater()
-        self._diy_btns = {}
         comps = self._diy_cfg().get("components") or {}
         for i, (key, name) in enumerate(self._diy_components()):
             self.diy_grid.addWidget(QLabel(tr(name)), i, 0)
@@ -558,7 +555,6 @@ class SettingsWindow(FramelessDialog):
             cl.setStyleSheet("padding:2px 6px;")
             cl.clicked.connect(lambda _=False, k=key: self._clear_diy_comp(k))
             self.diy_grid.addWidget(cl, i, 3)
-            self._diy_btns[key] = (None, ib)
 
     def _diy_comp_alpha(self, key, v):
         self._diy_update_comp(key, alpha=int(v))
@@ -570,11 +566,6 @@ class SettingsWindow(FramelessDialog):
         comps[key] = c
         self._diy_save(components=comps)
         self._apply_diy()
-
-    def _pick_diy_color(self, key):
-        c = ColorDialog.get_color(self, self.t, QColor("#ffffff"), with_alpha=True)
-        if c:
-            self._diy_update_comp(key, color=c.name(), image="")
 
     def _pick_diy_comp_image(self, key):
         path, _ = QFileDialog.getOpenFileName(
@@ -617,6 +608,14 @@ class SettingsWindow(FramelessDialog):
         self.theme_combo.clear()
         self.theme_combo.addItems(self.app.config.get("saved_themes", default={}).keys())
 
+    def _refresh_theme_ui(self):
+        """主题变更后刷新编辑区控件与缓存大小。"""
+        self._edit = self.app.config.data.get(self._kind, self._edit)
+        self._sync_controls()
+        self._sync_diy_ui()
+        self._apply_diy()
+        self._refresh_cache_size()
+
     def _load_theme(self):
         """加载三合一主题：桌面 + 设置栏 + 紧凑模式全部同步应用。"""
         name = self.theme_combo.currentText()
@@ -631,28 +630,14 @@ class SettingsWindow(FramelessDialog):
             entry.get("theme_settings") or dict(theme_mod.DEFAULT_THEME_SETTINGS))
         if entry.get("compact_style"):
             # 主题自带紧凑配置（含图片背景）：整体替换
-            cs = copy.deepcopy(entry["compact_style"])
-            self.app.config.data["compact_style"] = cs
+            self.app.config.data["compact_style"] = copy.deepcopy(entry["compact_style"])
         else:
             # 主题无紧凑配置（默认条目/旧主题）：重置为干净的默认结构（清掉图片背景）
             self.app.config.data["compact_style"] = copy.deepcopy(
                 core.DEFAULT_CONFIG["compact_style"])
         self.app.config.save()
         self.app.apply_theme("all")
-        self._edit = self.app.config.data.get(self._kind, self._edit)
-        self._sync_controls()
-        self._sync_diy_ui()
-        self._apply_diy()
-        self._refresh_cache_size()
-
-    def _prune_theme_keys(self):
-        if self._kind == "theme_settings":
-            for _k in ("done_text", "high", "mid", "low"):
-                self._edit.pop(_k, None)
-        elif self._kind == "compact_style":
-            # 紧凑主题字典不适用桌面主题专属键
-            for _k in ("done_text", "high", "mid", "low"):
-                self._edit.pop(_k, None)
+        self._refresh_theme_ui()
 
     def _snapshot_theme(self, name):
         """把当前三份主题配置打包为三合一主题条目。"""
@@ -662,12 +647,8 @@ class SettingsWindow(FramelessDialog):
             "compact_style": copy.deepcopy(self.app.config.get("compact_style", default={})),
         }
 
-    def _save_current_theme(self):
-        """保存当前改动到主题栏选中的主题（无选中则等同另存为）。"""
-        name = self.theme_combo.currentText()
-        if not name:
-            self._save_theme()
-            return
+    def _persist_theme(self, name: str):
+        """把当前三份主题配置保存到主题栏。"""
         themes = self.app.config.get("saved_themes", default={})
         entry = self._snapshot_theme(name)
         entry["theme"]["name"] = name
@@ -677,21 +658,21 @@ class SettingsWindow(FramelessDialog):
         self.theme_combo.setCurrentText(name)
         core.log.info(f"保存主题: {name}")
 
+    def _save_current_theme(self):
+        """保存当前改动到主题栏选中的主题（无选中则等同另存为）。"""
+        name = self.theme_combo.currentText()
+        if not name:
+            self._save_theme()
+            return
+        self._persist_theme(name)
+
     def _save_theme(self):
         name, ok = InputDialog.get_text(self, self.t, tr("保存主题"),
                                         tr("主题名称："),
                                         text=self.app.config.get("theme", default={})
                                         .get("name", tr("自定义主题")))
         if ok and name.strip():
-            name = name.strip()
-            themes = self.app.config.get("saved_themes", default={})
-            entry = self._snapshot_theme(name)
-            entry["theme"]["name"] = name
-            themes[name] = entry
-            self.app.config.set("saved_themes", themes)
-            self._refresh_theme_combo()
-            self.theme_combo.setCurrentText(name)
-            core.log.info(f"保存主题: {name}")
+            self._persist_theme(name.strip())
 
     def _delete_theme(self):
         name = self.theme_combo.currentText()
@@ -720,12 +701,8 @@ class SettingsWindow(FramelessDialog):
             core.DEFAULT_CONFIG["compact_style"])
         self.app.config.save()
         core.clean_theme_assets(self.app.config.data)
-        self._refresh_cache_size()
         self.app.apply_theme("all")
-        self._edit = self.app.config.data.get(self._kind, self._edit)
-        self._sync_controls()
-        self._sync_diy_ui()
-        self._apply_diy()
+        self._refresh_theme_ui()
 
     def _import_theme(self):
         path, _ = QFileDialog.getOpenFileName(self, tr("导入主题"), core.EXPORT_DIR,
@@ -1335,7 +1312,6 @@ class SettingsWindow(FramelessDialog):
 
         lay.addWidget(QLabel(tr("点击输入框后按下组合键（支持四键组合），全部松开即保存")))
         hk = self.app.config.get("hotkeys", default={})
-        self._hk_edits = {}
         fixed = [("settings", "打开设置窗口"), ("click_through", "切换鼠标穿透")]
         for key, name in fixed + CUSTOM_ACTIONS:
             row = QHBoxLayout()
@@ -1351,7 +1327,6 @@ class SettingsWindow(FramelessDialog):
             btn.clicked.connect(lambda _=False, k=key, e=edit: self._hotkey_changed(k, []))
             row.addWidget(btn)
             lay.addLayout(row)
-            self._hk_edits[key] = edit
 
         tip = QLabel(tr("提示：快捷键冲突时后注册的可能失效；清除后保存即可停用。"))
         tip.setWordWrap(True)

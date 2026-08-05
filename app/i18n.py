@@ -26,10 +26,6 @@ _TRANSLATIONS = {
     "取消": "Cancel",
     "长期": "Long-term",
     "⏱ 紧凑模式主题": "⏱ Compact Theme",
-    "紧凑 DIY 背景模式": "Compact DIY background",
-    "开启紧凑 DIY 背景（自定义紧凑条背景，样式区的背景色/图自动失效）":
-        "Enable compact DIY background (overrides style background)",
-    "紧凑条背景": "Compact bar background",
     "显示内容（可多选）": "Display (multi-select)",
     "时钟": "Clock",
     "下班倒计时（时间在「提醒」页设置）": "Off-work countdown (time set in Reminders)",

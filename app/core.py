@@ -23,11 +23,9 @@ from datetime import datetime, timedelta
 if getattr(sys, "frozen", False):
     # 打包后：可写目录 = exe 所在目录；资源目录 = 打包内只读目录
     ROOT = os.path.dirname(sys.executable)
-    APP_DIR = ROOT
     RES_DIR = os.path.join(getattr(sys, "_MEIPASS", ROOT), "resources")
 else:
-    APP_DIR = os.path.dirname(os.path.abspath(__file__))
-    ROOT = os.path.dirname(APP_DIR)
+    ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     RES_DIR = os.path.join(ROOT, "resources")
 DATA_DIR = os.path.join(ROOT, "data")
 LOG_DIR = os.path.join(ROOT, "logs")
@@ -40,7 +38,7 @@ ICON_PATH = os.path.join(RES_DIR, "icon.jpg")
 LOGO_PATH = os.path.join(RES_DIR, "logo.png")
 VBS_PATH = os.path.join(ROOT, "ZhaxxxxxxQAQ.vbs")
 APP_NAME = "ZhaxxxxxxQAQ"
-APP_VERSION = "1.3.0beta3"
+APP_VERSION = "1.3.0up"
 RUN_REG_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 
 # 托盘图标：优先用户桌面上的 图标.png（按当前用户主目录推导，不硬编码个人路径），
@@ -265,7 +263,6 @@ DEFAULT_CONFIG = {
             ]},
         ] + [dict(r) for r in EXAMPLE_FOLDER_RULES],
     },
-    "show_recent_days": 7,
     "reminder": {"todo_enabled": True, "todo_advance_minutes": 0, "recur_enabled": True,
                  "remind_enabled": True},
     "offwork": {"enabled": False, "time": "18:00", "format": "min",
@@ -537,10 +534,18 @@ class DataStore:
 
 
 # ---------------------------------------------------------------- 循环任务时间计算
+def parse_hm(s: str | None, default=(9, 0)) -> tuple[int, int]:
+    """解析 "HH:MM" → (时, 分)，失败返回 default。"""
+    try:
+        hh, mm = str(s or "").split(":")
+        return int(hh), int(mm)
+    except Exception:
+        return default
+
+
 def _recur_time(item) -> tuple[int, int]:
     try:
-        hh, mm = item["recur"].get("time", "09:00").split(":")
-        return int(hh), int(mm)
+        return parse_hm(item["recur"].get("time", "09:00"))
     except Exception:
         return 9, 0
 

@@ -480,6 +480,8 @@ class App(QObject):
                     and not it.get("done") and it.get("deadline"):
                 dl = core.parse_dt(it["deadline"])
                 adv = it.get("remind_advance")
+                if adv == -1:
+                    continue    # 不提醒
                 if adv is None:
                     adv = r.get("todo_advance_minutes", 0)
                 if dl and now >= dl - timedelta(minutes=adv or 0) \
