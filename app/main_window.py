@@ -617,6 +617,10 @@ class FloatWindow(_EdgeResizableMixin, QWidget):
         apply_frosted(self, self.t)
         apply_window_corners(self, self.t)
         self.apply_diy_bg((self.app.config.get("theme") or {}).get("diy_bg"))
+        if hasattr(self, "compact_bar"):
+            self._apply_compact_style()
+            if self.app.config.get("window", "compact"):
+                self._update_compact_text()
         self.refresh()
 
     def showEvent(self, e):
