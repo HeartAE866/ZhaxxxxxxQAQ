@@ -433,7 +433,7 @@ class FramelessDialog(_EdgeResizableMixin, QDialog):
             app = self._find_diy_app()
             if app is None or not hasattr(app, "config"):
                 return
-            cfg = app.config.get("diy_bg", default={})
+            cfg = (app.config.get("theme") or {}).get("diy_bg") or {}
             radius = (self.t or {}).get("radius", 12)
             if cfg.get("enabled"):
                 comp = (cfg.get("components") or {}).get("dialog") or {}

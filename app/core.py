@@ -108,8 +108,7 @@ def _collect_image_refs(config_data) -> set:
             for item in value:
                 walk(item)
 
-    for key in ("theme", "theme_settings", "diy_bg", "diy_bg_settings",
-                "compact_style", "saved_themes"):
+    for key in ("theme", "theme_settings", "compact_style", "saved_themes"):
         walk(config_data.get(key))
     return refs
 
@@ -241,16 +240,16 @@ EXAMPLE_FOLDER_RULES = [
 DEFAULT_CONFIG = {
     "language": "en",
     "update": {"check": True, "ignored_version": "", "last_seen_changelog": "", "last_source": ""},
-    "theme": dict(DEFAULT_THEME),
-    "theme_settings": dict(DEFAULT_THEME_SETTINGS),
+    "theme": {**dict(DEFAULT_THEME),
+              "diy_bg": {"enabled": False, "components": {}}},
+    "theme_settings": {**dict(DEFAULT_THEME_SETTINGS),
+                       "diy_bg": {"enabled": False, "components": {}}},
     "saved_themes": dict(DEFAULT_THEMES),
     "window": {"x": None, "y": None, "w": 330, "h": None,
                "locked": False, "topmost": False, "compact": False,
                "click_through": False, "show_clock": True},
     "base_folder": DEFAULT_BASE_FOLDER,
     "custom_folders": [],
-    "diy_bg": {"enabled": False, "image": "", "alpha": 120, "components": {}},
-    "diy_bg_settings": {"enabled": False, "image": "", "alpha": 120, "components": {}},
     "folder_rules": {
         "rules": [
             {"name": "默认规则", "levels": [
@@ -309,7 +308,11 @@ class Config:
         if isinstance(fr, dict) and isinstance(fr.get("rules"), list) \
                 and not any("（示例）" in (r.get("name") or "")
                             for r in fr["rules"]):
-                fr["rules"].extend([dict(r) for r in EXAMPLE_FOLDER_RULES])
+            fr["rules"].extend([dict(r) for r in EXAMPLE_FOLDER_RULES])
+        # DIY 背景并入对应主题字典（v1.3.0beta 及以前：独立存储键）
+        for top, dst in (("diy_bg", "theme"), ("diy_bg_settings", "theme_settings")):
+            if top in self.data and self.data[top]:
+                self.data.setdefault(dst, {})["diy_bg"] = self.data.pop(top)
 
     def _migrate_theme_images(self):
         """把旧配置中的外部主题图片迁移到应用数据目录。"""
@@ -331,8 +334,7 @@ class Config:
                 for item in value:
                     walk(item)
 
-        for key in ("theme", "theme_settings", "diy_bg", "diy_bg_settings",
-                    "compact_style"):
+        for key in ("theme", "theme_settings", "compact_style"):
             walk(self.data.get(key))
         return changed
 

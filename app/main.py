@@ -33,9 +33,14 @@ class App(QObject):
         self.qapp.setQuitOnLastWindowClosed(False)
         self.qapp.setApplicationName(core.APP_NAME)
 
-        # 单实例
-        self.lock = QLockFile(os.path.join(core.DATA_DIR, "app.lock"))
+        # 单实例（锁放在 %LOCALAPPDATA%，确保 dev/安装版互斥）
+        _lock_dir = os.path.join(os.environ.get("LOCALAPPDATA", core.DATA_DIR),
+                                 "ZhaxxxxxxQAQ")
+        os.makedirs(_lock_dir, exist_ok=True)
+        self.lock = QLockFile(os.path.join(_lock_dir, "app.lock"))
+        self.lock.setStaleLockTime(3000)  # 3秒后认为锁文件过期
         if not self.lock.tryLock(3000):
+            log("单实例锁：已有另一个实例在运行，退出。")
             sys.exit(0)
 
         self.config = core.Config()

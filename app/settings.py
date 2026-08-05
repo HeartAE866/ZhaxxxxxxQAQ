@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import base64
+import copy
 import hashlib
 import os
 import shutil
@@ -113,7 +114,7 @@ class SettingsWindow(FramelessDialog):
         # 滚轮防误触：横向滑条 + 下拉框（需先单击展开才能滚轮）
         for w in list(self.findChildren(QComboBox)) + list(self.findChildren(QSlider)):
             w.installEventFilter(_WHEEL_GUARD)
-        self.apply_diy_settings(self.app.config.get("diy_bg_settings", default={}))
+        self.apply_diy_settings((self.app.config.get("theme_settings") or {}).get("diy_bg"))
 
     def apply_diy_settings(self, cfg: dict):
         """应用设置栏 DIY 背景（面板背景色或图片，0-100 不透明度）。"""
@@ -297,7 +298,8 @@ class SettingsWindow(FramelessDialog):
         self.theme_combo = QComboBox()
         self._refresh_theme_combo()
         trow.addWidget(self.theme_combo, 1)
-        for text, fn in [("加载", self._load_theme), ("另存为", self._save_theme),
+        for text, fn in [("保存", self._save_current_theme), ("加载", self._load_theme),
+                         ("另存为", self._save_theme), ("删除", self._delete_theme),
                          ("导入", self._import_theme), ("导出", self._export_theme)]:
             b = QPushButton(tr(text))
             b.clicked.connect(fn)
@@ -370,6 +372,7 @@ class SettingsWindow(FramelessDialog):
         self._rebuild_color_grid()
         self._sync_controls()
         self._sync_diy_ui()
+        self._apply_diy()
 
     def _rebuild_color_grid(self):
         items = MAIN_COLOR_ITEMS if self._kind == "theme" else SETTINGS_COLOR_ITEMS
@@ -448,16 +451,14 @@ class SettingsWindow(FramelessDialog):
                    ("clock", "时钟面板"), ("dialog", "对话框")]
     DIY_SETTINGS = [("panel", "设置栏背景")]
 
-    def _diy_key(self):
-        return "diy_bg" if self._kind == "theme" else "diy_bg_settings"
-
     def _diy_cfg(self):
-        return self.app.config.get(self._diy_key(), default={}) or {}
+        return (self._edit or {}).get("diy_bg") or {}
 
     def _diy_save(self, **kw):
         cfg = dict(self._diy_cfg())
         cfg.update(kw)
-        self.app.config.data[self._diy_key()] = cfg
+        self._edit.setdefault("diy_bg", {})
+        self._edit["diy_bg"] = cfg
         self._diy_save_timer.start()     # 拖动滑条时合并为一次落盘，界面实时生效
         self._apply_diy()
 
@@ -585,17 +586,34 @@ class SettingsWindow(FramelessDialog):
         saved = self.app.config.get("saved_themes", default={})
         if name in saved:
             self._edit.clear()
-            self._edit.update(saved[name])
+            self._edit.update(copy.deepcopy(saved[name]))
             self._prune_theme_keys()
             self.app.config.data[self._kind] = self._edit
             self.app.config.save()
             self.app.apply_theme(self._kind)
             self._sync_controls()
+            self._sync_diy_ui()
+            self._apply_diy()
+            self._refresh_cache_size()
 
     def _prune_theme_keys(self):
         if self._kind == "theme_settings":
             for _k in ("done_text", "high", "mid", "low"):
                 self._edit.pop(_k, None)
+
+    def _save_current_theme(self):
+        """保存当前改动到主题栏选中的主题（无选中则等同另存为）。"""
+        name = self.theme_combo.currentText()
+        if not name:
+            self._save_theme()
+            return
+        themes = self.app.config.get("saved_themes", default={})
+        self._edit["name"] = name
+        themes[name] = copy.deepcopy(self._edit)
+        self.app.config.set("saved_themes", themes)
+        self._refresh_theme_combo()
+        self.theme_combo.setCurrentText(name)
+        core.log.info(f"保存主题: {name}")
 
     def _save_theme(self):
         name, ok = QInputDialog.getText(self, tr("保存主题"), tr("主题名称："),
@@ -604,11 +622,27 @@ class SettingsWindow(FramelessDialog):
             name = name.strip()
             self._edit["name"] = name
             themes = self.app.config.get("saved_themes", default={})
-            themes[name] = dict(self._edit)
+            themes[name] = copy.deepcopy(self._edit)
             self.app.config.set("saved_themes", themes)
             self._refresh_theme_combo()
             self.theme_combo.setCurrentText(name)
             core.log.info(f"保存主题: {name}")
+
+    def _delete_theme(self):
+        name = self.theme_combo.currentText()
+        if not name:
+            return
+        ok, _ = ConfirmDialog.ask(self, self.t, tr("删除主题"),
+                                  tr("确定删除主题「{name}」？").format(name=name),
+                                  ok_text=tr("删除"))
+        if not ok:
+            return
+        themes = self.app.config.get("saved_themes", default={})
+        if name in themes:
+            del themes[name]
+            self.app.config.set("saved_themes", themes)
+            self._refresh_theme_combo()
+            Toast.show_text(tr("已删除"))
 
     def _import_theme(self):
         path, _ = QFileDialog.getOpenFileName(self, tr("导入主题"), core.EXPORT_DIR,
@@ -625,6 +659,7 @@ class SettingsWindow(FramelessDialog):
                 if not chosen:
                     return
                 assets = th.get("assets") or {}
+                imported_names = []
                 for part in chosen:
                     value = self._unpack_theme_value(th["parts"][part], assets)
                     if part in ("theme", "theme_settings"):
@@ -633,6 +668,18 @@ class SettingsWindow(FramelessDialog):
                             for _k in ("done_text", "high", "mid", "low"):
                                 value.pop(_k, None)
                     self.app.config.data[part] = value
+                    # 导入即保存进主题栏：桌面主题存原名，设置栏主题同名时加后缀
+                    if part in ("theme", "theme_settings"):
+                        themes = self.app.config.get("saved_themes", default={})
+                        nm = (value or {}).get("name") or tr("导入主题")
+                        if part == "theme_settings":
+                            base = nm
+                            nm = base + tr("（设置栏）")
+                            while nm in themes:
+                                nm += "·"
+                        themes[nm] = copy.deepcopy(value)
+                        self.app.config.set("saved_themes", themes)
+                        imported_names.append(nm)
                 self.app.config.save()
                 for part in chosen:
                     if part in ("theme", "theme_settings"):
@@ -642,6 +689,15 @@ class SettingsWindow(FramelessDialog):
                     self.app.win._update_compact_text()
                 self._edit = self.app.config.data.get(self._kind, self._edit)
                 self._sync_controls()
+                self._sync_diy_ui()
+                self._apply_diy()
+                self._refresh_theme_combo()
+                if imported_names:
+                    # 优先选中桌面主题（无后缀名），否则选最后导入的
+                    pick = next((n for n in imported_names if tr("（设置栏）") not in n),
+                                imported_names[-1])
+                    self.theme_combo.setCurrentText(pick)
+                    self._load_theme()
                 Toast.show_text(tr("主题已导入"))
             except Exception as e:
                 core.log.error(f"导入主题失败: {e}")

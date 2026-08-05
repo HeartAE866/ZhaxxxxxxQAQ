@@ -318,7 +318,7 @@ class FloatWindow(_EdgeResizableMixin, QWidget):
         self._build_shell()
         self.apply_window_state()
         self.refresh()
-        self.apply_diy_bg(app.config.get("diy_bg", default={}))
+        self.apply_diy_bg((self.app.config.get("theme") or {}).get("diy_bg"))
 
     # ---------------- 框架
     def _build_shell(self):
@@ -616,7 +616,7 @@ class FloatWindow(_EdgeResizableMixin, QWidget):
             f"font-size:10pt;font-weight:bold;color:{self.t['text']};")
         apply_frosted(self, self.t)
         apply_window_corners(self, self.t)
-        self.apply_diy_bg(self.app.config.get("diy_bg", default={}))
+        self.apply_diy_bg((self.app.config.get("theme") or {}).get("diy_bg"))
         self.refresh()
 
     def showEvent(self, e):
